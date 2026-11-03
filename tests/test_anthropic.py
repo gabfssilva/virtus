@@ -190,7 +190,7 @@ def describe_anthropic():
             """Current weather for a city."""
             return f"Sunny and 25°C in {city}"
 
-        @agent(provider=Anthropic(effort="low"), capabilities=[weather])
+        @agent(provider=Anthropic("claude-haiku-5-5", effort="low"), capabilities=[weather])
         async def forecast(city: str) -> Forecast:
             """Use the weather tool to tell whether it is sunny in {city}."""
             ...
