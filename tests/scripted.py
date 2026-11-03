@@ -2,7 +2,7 @@ import json
 import re
 from collections.abc import AsyncIterator
 
-from virtus import AssistantMessage, Provider, Request, TextDelta, ToolCall
+from virtus import AssistantMessage, Delta, Provider, Request, TextDelta, ToolCall
 
 
 class Scripted(Provider):
@@ -12,7 +12,7 @@ class Scripted(Provider):
         self.replies = list(replies)
         self.requests: list[Request] = []
 
-    async def complete(self, request: Request) -> AsyncIterator[TextDelta | AssistantMessage]:
+    async def complete(self, request: Request) -> AsyncIterator[Delta | AssistantMessage]:
         self.requests.append(request)
         reply = self.replies.pop(0)
         for word in re.findall(r"\S+\s*", reply.content):

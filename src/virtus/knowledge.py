@@ -47,8 +47,12 @@ class Store:
             if root.is_file():
                 yield load(root, root.name)
             elif root.is_dir():
-                files = (f for f in sorted(root.rglob("*")) if f.is_file() and f.suffix in self.suffixes)
-                yield from (load(f, str(f.relative_to(root))) for f in files)
+                for file in sorted(root.rglob("*")):
+                    if file.suffix in self.suffixes:
+                        try:
+                            yield load(file, str(file.relative_to(root)))
+                        except (FileNotFoundError, IsADirectoryError):
+                            continue  # deleted, or a directory named like a file, while listing
 
         return tuple(d for root in self.roots for d in under(root))
 

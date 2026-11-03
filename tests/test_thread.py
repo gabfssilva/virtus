@@ -8,9 +8,9 @@ from tests.scripted import Scripted, calls
 from virtus import (
     AssistantMessage,
     Capability,
+    Delta,
     Provider,
     Request,
-    TextDelta,
     ToolCall,
     ToolResult,
     UserMessage,
@@ -106,7 +106,7 @@ def describe_thread():
             def __init__(self) -> None:
                 self.requests: list[Request] = []
 
-            async def complete(self, request: Request) -> AsyncIterator[TextDelta | AssistantMessage]:
+            async def complete(self, request: Request) -> AsyncIterator[Delta | AssistantMessage]:
                 self.requests.append(request)
                 await asyncio.sleep(0.01)
                 yield AssistantMessage(f"reply {len(self.requests)}")

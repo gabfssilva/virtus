@@ -5,7 +5,7 @@ from itertools import takewhile
 from types import MethodType
 
 from virtus.filter import Capability, Filter, Next
-from virtus.message import Event, Message, TextDelta, UserMessage
+from virtus.message import Event, Message, TextDelta, ToolCallDelta, UserMessage
 from virtus.request import Request
 from virtus.tool import Tool
 
@@ -80,7 +80,7 @@ class OnInput(Capability):
 class OnMessage(Capability):
     """Sees every complete message: assistant replies, including tool calls, and tool results.
 
-    Streamed `TextDelta`s pass through untouched. Raising on an assistant message stops the run
+    Streamed deltas pass through untouched. Raising on an assistant message stops the run
     before its tool calls execute; returning a modified message does not change which calls run.
     """
 
@@ -93,7 +93,7 @@ class OnMessage(Capability):
         async def apply(request: Request, next: Next) -> AsyncIterator[Event]:
             async for event in next(request):
                 match event:
-                    case TextDelta():
+                    case TextDelta() | ToolCallDelta():
                         yield event
                     case message:
                         result = await _resolve(self.function(message))

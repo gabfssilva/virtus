@@ -35,5 +35,18 @@ class TextDelta:
     content: str
 
 
+@dataclass(frozen=True)
+class ToolCallDelta:
+    """A fragment of a tool call's arguments, streamed before the `AssistantMessage` carrying the whole call.
+
+    The id and name are known from the first fragment, whose `arguments` may be empty.
+    """
+
+    id: str
+    name: str
+    arguments: str
+
+
+type Delta = TextDelta | ToolCallDelta
 type Message = UserMessage | AssistantMessage | ToolResult
-type Event = TextDelta | Message
+type Event = Delta | Message

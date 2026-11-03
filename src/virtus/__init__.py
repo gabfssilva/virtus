@@ -3,7 +3,17 @@ from virtus.capability import Capabilities, context, on_input, on_message
 from virtus.compaction import compaction
 from virtus.filter import Capability, Filter, Next
 from virtus.knowledge import Document, Store, knowledge, memory
-from virtus.message import AssistantMessage, Event, Message, TextDelta, ToolCall, ToolResult, UserMessage
+from virtus.message import (
+    AssistantMessage,
+    Delta,
+    Event,
+    Message,
+    TextDelta,
+    ToolCall,
+    ToolCallDelta,
+    ToolResult,
+    UserMessage,
+)
 from virtus.output import Snapshot
 from virtus.provider import Provider
 from virtus.request import Request
@@ -16,6 +26,7 @@ __all__ = [
     "Capabilities",
     "Capability",
     "Conversation",
+    "Delta",
     "Document",
     "Event",
     "Filter",
@@ -29,6 +40,7 @@ __all__ = [
     "Thread",
     "Tool",
     "ToolCall",
+    "ToolCallDelta",
     "ToolResult",
     "UserMessage",
     "agent",

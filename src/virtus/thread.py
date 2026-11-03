@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Final, Protocol, runtime_checkable
 from uuid import uuid4
 
 from virtus.filter import Capability, Filter, Next
-from virtus.message import AssistantMessage, Event, Message, TextDelta, ToolCall, ToolResult, UserMessage
+from virtus.message import AssistantMessage, Event, Message, TextDelta, ToolCall, ToolCallDelta, ToolResult, UserMessage
 from virtus.request import Request
 from virtus.tool import Tool
 
@@ -158,7 +158,7 @@ class Thread[**P, R](Capability, Conversation):
             )
 
             async for event in step(request):
-                if not isinstance(event, TextDelta):
+                if not isinstance(event, (TextDelta, ToolCallDelta)):
                     produced.append(event)
                 yield event
 

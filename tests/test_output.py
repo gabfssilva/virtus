@@ -8,6 +8,7 @@ from pydantic import BaseModel
 from tests.scripted import Scripted, calls
 from virtus import (
     AssistantMessage,
+    Delta,
     Event,
     Provider,
     Request,
@@ -38,7 +39,7 @@ class Chunked(Provider):
         self.sent = 0
         self.proceed = asyncio.Event()
 
-    async def complete(self, request: Request) -> AsyncIterator[TextDelta | AssistantMessage]:
+    async def complete(self, request: Request) -> AsyncIterator[Delta | AssistantMessage]:
         for chunk in self.chunks:
             if self.sent:
                 await self.proceed.wait()

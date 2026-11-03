@@ -1,9 +1,10 @@
-"""`AsyncIterator[str]` streams the answer's text; `AsyncIterator[Event]` streams everything filters see."""
+"""`AsyncIterator[str]` streams the answer's text; `AsyncIterator[Event]` streams everything filters see,
+including tool call arguments as the model writes them."""
 
 import asyncio
 from collections.abc import AsyncIterator
 
-from virtus import Event, TextDelta, ToolResult, agent, tool
+from virtus import Event, TextDelta, ToolCallDelta, ToolResult, agent, tool
 from virtus.providers import OpenAI
 
 
@@ -34,6 +35,8 @@ async def main() -> None:
         match event:
             case TextDelta(content=text):
                 print(text, end="", flush=True)
+            case ToolCallDelta(name=name, arguments=arguments):
+                print(f"[{name} <- {arguments!r}]")
             case ToolResult(name=name, content=content):
                 print(f"[{name} -> {content}]")
     print()

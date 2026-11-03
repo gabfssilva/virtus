@@ -15,7 +15,7 @@ from openai.types.chat.chat_completion_chunk import ChoiceDeltaToolCall
 from openai.types.chat.chat_completion_message_function_tool_call_param import Function
 from openai.types.chat.completion_create_params import ResponseFormat
 
-from virtus.message import AssistantMessage, Message, TextDelta, ToolCall, ToolResult, UserMessage
+from virtus.message import AssistantMessage, Delta, Message, TextDelta, ToolCall, ToolCallDelta, ToolResult, UserMessage
 from virtus.provider import Provider
 from virtus.request import Request
 from virtus.tool import Tool
@@ -37,7 +37,7 @@ class OpenAI(Provider):
         self._api_key = api_key
         self._base_url = base_url
 
-    async def complete(self, request: Request) -> AsyncIterator[TextDelta | AssistantMessage]:
+    async def complete(self, request: Request) -> AsyncIterator[Delta | AssistantMessage]:
         stream = await self._client.chat.completions.create(
             model=self.model,
             messages=messages(request.system, request.messages),
@@ -56,7 +56,11 @@ class OpenAI(Provider):
                     text.append(choice.delta.content)
                     yield TextDelta(choice.delta.content)
                 for fragment in choice.delta.tool_calls or ():
-                    fragments.setdefault(fragment.index, []).append(fragment)
+                    parts = fragments.setdefault(fragment.index, [])
+                    parts.append(fragment)
+                    call = _tool_call(parts)
+                    piece = fragment.function.arguments if fragment.function else None
+                    yield ToolCallDelta(call.id, call.name, piece or "")
 
         yield AssistantMessage("".join(text), tuple(_tool_call(f) for _, f in sorted(fragments.items())))
 

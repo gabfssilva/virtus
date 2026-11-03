@@ -19,7 +19,7 @@ from pydantic import BaseModel, TypeAdapter, ValidationError, create_model
 from pydantic_core import from_json
 from typing_extensions import TypeForm
 
-from virtus.message import AssistantMessage, Event, Message, TextDelta
+from virtus.message import AssistantMessage, Event, Message, TextDelta, ToolCallDelta
 
 type Snapshot[T] = AsyncIterator[T]
 """Return annotation for a `T` streamed as successive, increasingly complete versions of itself."""
@@ -185,7 +185,7 @@ async def _answer(events: AsyncIterator[Event]) -> str:
     last: Message | None = None
 
     async for event in events:
-        if not isinstance(event, TextDelta):
+        if not isinstance(event, (TextDelta, ToolCallDelta)):
             last = event
 
     match last:
@@ -208,6 +208,8 @@ async def _answers(events: AsyncIterator[Event]) -> AsyncIterator[str | Assistan
             case AssistantMessage(tool_calls=()):
                 yield event
                 return
+            case ToolCallDelta():
+                pass
             case _:
                 text.clear()
                 last = event
