@@ -40,7 +40,7 @@ class OpenAI(Provider):
     async def complete(self, request: Request) -> AsyncIterator[TextDelta | AssistantMessage]:
         stream = await self._client.chat.completions.create(
             model=self.model,
-            messages=messages(request),
+            messages=messages(request.system, request.messages),
             tools=[_tool(t) for t in request.tools] or omit,
             response_format=_response_format(request.output) if request.output else omit,
             temperature=omit if self.temperature is None else self.temperature,
@@ -69,7 +69,7 @@ class OpenAI(Provider):
         return f"OpenAI({self.model!r})"
 
 
-def messages(request: Request) -> list[ChatCompletionMessageParam]:
+def messages(system: str, history: Sequence[Message]) -> list[ChatCompletionMessageParam]:
     def convert(message: Message) -> ChatCompletionMessageParam:
         match message:
             case UserMessage(content=content):
@@ -90,8 +90,8 @@ def messages(request: Request) -> list[ChatCompletionMessageParam]:
             case ToolResult(call_id=call_id, content=content):
                 return ChatCompletionToolMessageParam(role="tool", tool_call_id=call_id, content=content)
 
-    system = [ChatCompletionSystemMessageParam(role="system", content=request.system)] if request.system else []
-    return [*system, *map(convert, request.messages)]
+    prompt = [ChatCompletionSystemMessageParam(role="system", content=system)] if system else []
+    return [*prompt, *map(convert, history)]
 
 
 def _tool(tool: Tool) -> ChatCompletionToolParam:

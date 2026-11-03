@@ -3,27 +3,21 @@ import os
 import pytest
 from pydantic import BaseModel
 
-from liteagent import AssistantMessage, Request, ToolCall, ToolResult, UserMessage, agent, tool
+from liteagent import AssistantMessage, ToolCall, ToolResult, UserMessage, agent, tool
 from liteagent.providers import OpenAI
 from liteagent.providers.openai import messages
 
 
 def describe_messages():
     def it_converts_the_conversation_to_chat_completions_format():
-        request = Request(
-            system="Be brief.",
-            messages=(
-                UserMessage("Weather?"),
-                AssistantMessage(tool_calls=(ToolCall("c1", "weather", '{"city": "Paris"}'),)),
-                ToolResult("c1", "weather", "Sunny"),
-                AssistantMessage("It's sunny"),
-            ),
-            tools=(),
-            output=None,
-            iteration=1,
+        history = (
+            UserMessage("Weather?"),
+            AssistantMessage(tool_calls=(ToolCall("c1", "weather", '{"city": "Paris"}'),)),
+            ToolResult("c1", "weather", "Sunny"),
+            AssistantMessage("It's sunny"),
         )
 
-        assert messages(request) == [
+        assert messages("Be brief.", history) == [
             {"role": "system", "content": "Be brief."},
             {"role": "user", "content": "Weather?"},
             {
