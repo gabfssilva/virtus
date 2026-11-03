@@ -82,9 +82,9 @@ def describe_stream():
         provider = Scripted(calls(("add", {"a": 1, "b": 2})), AssistantMessage("It is 3"))
 
         @agent(provider=provider, capabilities=[add])
-        async def math(question: str) -> str: ...
+        async def math(question: str) -> AsyncIterator[Event]: ...
 
-        events = [event async for event in math.stream("1 + 2?")]
+        events = [event async for event in math("1 + 2?")]
 
         assert events == [
             calls(("add", {"a": 1, "b": 2})),

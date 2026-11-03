@@ -59,10 +59,10 @@ def describe_thread():
 
     async def it_records_streamed_turns():
         @agent(provider=Scripted(AssistantMessage("streamed")))
-        async def chat(message: str) -> str: ...
+        async def chat(message: str) -> AsyncIterator[str]: ...
 
         thread = chat.thread()
-        async for _ in thread.stream("hi"):
+        async for _ in thread("hi"):
             pass
 
         assert thread.history == (UserMessage("hi"), AssistantMessage("streamed"))
@@ -159,6 +159,16 @@ def describe_agent_thread():
         assert fresh is not disposed
         assert disposed.history == ()
         assert provider.requests[1].messages == (UserMessage("second"),)
+
+    async def it_refuses_calls_after_dispose():
+        @agent(provider=Scripted(AssistantMessage("one")))
+        async def chat(message: str) -> str: ...
+
+        thread = chat.thread()
+        thread.dispose()
+
+        with pytest.raises(RuntimeError, match="disposed"):
+            await thread("hello")
 
     def it_rejects_a_parameter_named_thread():
         with pytest.raises(TypeError, match="reserved"):

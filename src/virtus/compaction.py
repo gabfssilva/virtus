@@ -1,8 +1,9 @@
 from collections.abc import AsyncIterator, Sequence
 from dataclasses import replace
 
+from virtus.filter import Filter, Next
 from virtus.message import AssistantMessage, Event, Message, ToolResult, UserMessage
-from virtus.request import Filter, Next, Request
+from virtus.request import Request
 
 SUMMARY_PROMPT = (
     "Summarize the conversation below so the summary can replace it. Keep facts, decisions, results "
@@ -20,14 +21,8 @@ def compaction(max_tokens: int = 32_000, keep: int = 8) -> Filter:
     """
 
     async def summarize(messages: Sequence[Message], request: Request) -> str:
-        summary = Request(
-            system=SUMMARY_PROMPT,
-            messages=(UserMessage(_transcript(messages)),),
-            tools=(),
-            output=None,
-            iteration=0,
-            provider=request.provider,
-            thread=request.thread,
+        summary = replace(
+            request, system=SUMMARY_PROMPT, messages=(UserMessage(_transcript(messages)),), tools=(), output=None
         )
         replies = [e async for e in request.provider.complete(summary) if isinstance(e, AssistantMessage)]
         return replies[-1].content

@@ -8,8 +8,9 @@ from typing import get_type_hints
 from pydantic import BaseModel, create_model
 from pydantic_core import to_json
 
+from virtus.filter import Capability, Filter, Next
 from virtus.message import Event, ToolCall, ToolResult
-from virtus.request import Capability, Filter, Next, Request
+from virtus.request import Request
 
 
 @dataclass(frozen=True)
@@ -70,8 +71,6 @@ def parameters_model(function: Callable[..., object]) -> type[BaseModel]:
 
 async def invoke(function: Callable[..., object], arguments: Mapping[str, object]) -> object:
     """Await async callables; run sync ones in a thread so they don't block the event loop."""
-    if not inspect.iscoroutinefunction(function):
-        return await asyncio.to_thread(function, **arguments)
-
-    result = function(**arguments)
-    return await result if inspect.isawaitable(result) else result
+    if inspect.iscoroutinefunction(function):
+        return await function(**arguments)
+    return await asyncio.to_thread(function, **arguments)

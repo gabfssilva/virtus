@@ -29,7 +29,7 @@ markers = ["integration: calls a real LLM API"]
 addopts = "-m 'not integration'"
 
 [tool.pyrefly]
-project-includes = ["src", "tests"]
+project-includes = ["src", "tests", "examples"]
 search-path = ["src", "."]
 
 [tool.ruff]

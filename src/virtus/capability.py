@@ -4,8 +4,9 @@ from dataclasses import dataclass, replace
 from itertools import takewhile
 from types import MethodType
 
+from virtus.filter import Capability, Filter, Next
 from virtus.message import Event, Message, TextDelta, UserMessage
-from virtus.request import Capability, Filter, Next, Request
+from virtus.request import Request
 from virtus.tool import Tool
 
 
