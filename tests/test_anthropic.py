@@ -18,7 +18,18 @@ from anthropic.types import TextDelta as AnthropicTextDelta
 from anthropic.types.raw_message_delta_event import Delta
 from pydantic import BaseModel
 
-from virtus import AssistantMessage, Event, TextDelta, ToolCall, ToolCallDelta, ToolResult, UserMessage, agent, tool
+from virtus import (
+    AssistantMessage,
+    Event,
+    Image,
+    TextDelta,
+    ToolCall,
+    ToolCallDelta,
+    ToolResult,
+    UserMessage,
+    agent,
+    tool,
+)
 from virtus.providers import Anthropic
 from virtus.providers.anthropic import messages
 
@@ -51,6 +62,19 @@ def describe_messages():
                 ],
             },
             {"role": "assistant", "content": [{"type": "text", "text": "It's sunny"}]},
+        ]
+
+    def it_sends_images_as_base64_blocks_before_the_text():
+        history = (UserMessage("What is this?", (Image(b"\x89PNG", "image/png"),)),)
+
+        assert messages(history) == [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": "iVBORw=="}},
+                    {"type": "text", "text": "What is this?"},
+                ],
+            }
         ]
 
 

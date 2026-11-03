@@ -1,9 +1,30 @@
+import mimetypes
 from dataclasses import dataclass
+from pathlib import Path
+from typing import Literal
+
+type MediaType = Literal["image/jpeg", "image/png", "image/gif", "image/webp"]
+
+
+@dataclass(frozen=True)
+class Image:
+    data: bytes
+    media_type: MediaType
+
+    @classmethod
+    def read(cls, path: str | Path) -> "Image":
+        """Load an image file, taking the media type from its extension."""
+        match mimetypes.guess_type(str(path))[0]:
+            case "image/jpeg" | "image/png" | "image/gif" | "image/webp" as media_type:
+                return cls(Path(path).read_bytes(), media_type)
+            case other:
+                raise ValueError(f"{path}: unsupported image type {other!r}")
 
 
 @dataclass(frozen=True)
 class UserMessage:
     content: str
+    images: tuple[Image, ...] = ()
 
 
 @dataclass(frozen=True)

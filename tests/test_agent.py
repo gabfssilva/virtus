@@ -1,11 +1,12 @@
 import json
 from collections.abc import AsyncIterator
+from pathlib import Path
 
 import pytest
 from pydantic import BaseModel
 
 from tests.scripted import Scripted, calls
-from virtus import AssistantMessage, Event, Next, Request, TextDelta, ToolResult, UserMessage, agent, tool
+from virtus import AssistantMessage, Event, Image, Next, Request, TextDelta, ToolResult, UserMessage, agent, tool
 
 
 class City(BaseModel):
@@ -116,3 +117,26 @@ def describe_delegation():
         assert (delegate.name, delegate.description) == ("researcher", "Researches a topic")
         assert research_provider.requests[0].messages == (UserMessage("Research bees"),)
         assert lead_provider.requests[1].messages[-1] == ToolResult("call-0", "researcher", "Bees dance")
+
+
+def describe_images():
+    def it_attaches_image_arguments_and_names_them_in_the_prompt():
+        picture = Image(b"\x89PNG", "image/png")
+        provider = Scripted(AssistantMessage("a cat"))
+
+        @agent(provider=provider)
+        async def describe(photo: Image, question: str, more: list[Image] = []) -> str:  # noqa: B006
+            """{question} ({photo})"""
+            ...
+
+        message = describe.input(picture, "What is this?", [picture, picture])
+
+        assert message == UserMessage("What is this? ([image])", (picture, picture, picture))
+
+    def it_reads_files_and_rejects_unknown_types(tmp_path: Path):
+        file = tmp_path / "pixel.png"
+        file.write_bytes(b"\x89PNG")
+
+        assert Image.read(file) == Image(b"\x89PNG", "image/png")
+        with pytest.raises(ValueError, match="unsupported image type"):
+            Image.read(tmp_path / "notes.txt")

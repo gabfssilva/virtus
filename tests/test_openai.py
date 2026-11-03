@@ -12,7 +12,18 @@ from openai.types.chat.chat_completion_chunk import (
 )
 from pydantic import BaseModel
 
-from virtus import AssistantMessage, Event, TextDelta, ToolCall, ToolCallDelta, ToolResult, UserMessage, agent, tool
+from virtus import (
+    AssistantMessage,
+    Event,
+    Image,
+    TextDelta,
+    ToolCall,
+    ToolCallDelta,
+    ToolResult,
+    UserMessage,
+    agent,
+    tool,
+)
 from virtus.providers import OpenAI
 from virtus.providers.openai import messages
 
@@ -38,6 +49,19 @@ def describe_messages():
             },
             {"role": "tool", "tool_call_id": "c1", "content": "Sunny"},
             {"role": "assistant", "content": "It's sunny"},
+        ]
+
+    def it_sends_images_as_data_urls_next_to_the_text():
+        history = (UserMessage("What is this?", (Image(b"\x89PNG", "image/png"),)),)
+
+        assert messages("", history) == [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "What is this?"},
+                    {"type": "image_url", "image_url": {"url": "data:image/png;base64,iVBORw=="}},
+                ],
+            }
         ]
 
 
@@ -76,8 +100,9 @@ def describe_streaming():
             chunk(ChoiceDelta(tool_calls=[fragment(0, arguments='{"city": '), fragment(1, id="c2", name="time")])),
             chunk(ChoiceDelta(tool_calls=[fragment(0, arguments='"Paris"}'), fragment(1, arguments="{}")])),
         ]
-        provider = OpenAI()
-        provider.__dict__["_client"] = Replaying(chunks, [chunk(ChoiceDelta(content="done"))])
+        provider = OpenAI(max_tokens=300, reasoning_effort="low")
+        client = Replaying(chunks, [chunk(ChoiceDelta(content="done"))])
+        provider.__dict__["_client"] = client
 
         @agent(provider=provider)
         async def bot(message: str) -> AsyncIterator[Event]: ...
@@ -86,6 +111,7 @@ def describe_streaming():
         first_step = events[: next(i for i, e in enumerate(events) if isinstance(e, AssistantMessage)) + 1]
 
         assert events[-1] == AssistantMessage("done")
+        assert (client.calls[0]["max_completion_tokens"], client.calls[0]["reasoning_effort"]) == (300, "low")
         assert first_step == [
             TextDelta("Let me check."),
             ToolCallDelta("c1", "weather", ""),
@@ -111,10 +137,12 @@ class Replaying:
     def __init__(self, *replies: list[ChatCompletionChunk]) -> None:
         self.chat = SimpleNamespace(completions=SimpleNamespace(create=self.create))
         self.replies = list(replies)
+        self.calls: list[dict[str, object]] = []
 
-    async def create(self, **_: object) -> AsyncIterator[ChatCompletionChunk]:
+    async def create(self, **arguments: object) -> AsyncIterator[ChatCompletionChunk]:
         async def stream(chunks: list[ChatCompletionChunk]) -> AsyncIterator[ChatCompletionChunk]:
             for chunk in chunks:
                 yield chunk
 
+        self.calls.append(arguments)
         return stream(self.replies.pop(0))

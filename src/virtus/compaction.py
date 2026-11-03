@@ -49,8 +49,8 @@ def compaction(max_tokens: int = 32_000, keep: int = 8) -> Filter:
 def _transcript(messages: Sequence[Message]) -> str:
     def lines(message: Message) -> list[str]:
         match message:
-            case UserMessage(content=content):
-                return [f"user: {content}"]
+            case UserMessage(content=content, images=images):
+                return [f"user: {content}" + (f" [{len(images)} image(s)]" if images else "")]
             case AssistantMessage(content=content, tool_calls=calls):
                 text = [f"assistant: {content}"] if content else []
                 return [*text, *(f"assistant called {c.name}({c.arguments})" for c in calls)]

@@ -1,4 +1,5 @@
 import json
+from base64 import b64encode
 from collections.abc import AsyncIterator, Iterator, Mapping, Sequence
 from functools import cached_property
 from itertools import groupby
@@ -6,7 +7,9 @@ from typing import Literal
 
 from anthropic import AsyncAnthropic, omit
 from anthropic.types import (
+    Base64ImageSourceParam,
     ContentBlockParam,
+    ImageBlockParam,
     MessageParam,
     OutputConfigParam,
     TextBlockParam,
@@ -15,7 +18,17 @@ from anthropic.types import (
     ToolUseBlockParam,
 )
 
-from virtus.message import AssistantMessage, Delta, Message, TextDelta, ToolCall, ToolCallDelta, ToolResult, UserMessage
+from virtus.message import (
+    AssistantMessage,
+    Delta,
+    Image,
+    Message,
+    TextDelta,
+    ToolCall,
+    ToolCallDelta,
+    ToolResult,
+    UserMessage,
+)
 from virtus.provider import Provider
 from virtus.request import Request
 from virtus.tool import Tool
@@ -100,8 +113,11 @@ def messages(history: Sequence[Message]) -> list[MessageParam]:
 
     def convert(message: Message) -> MessageParam:
         match message:
-            case UserMessage(content=content):
+            case UserMessage(content=content, images=()):
                 return {"role": "user", "content": content}
+            case UserMessage(content=content, images=images):
+                blocks: list[ContentBlockParam] = [*map(_image, images), TextBlockParam(type="text", text=content)]
+                return {"role": "user", "content": blocks}
             case AssistantMessage(content=content, tool_calls=calls):
                 text: list[ContentBlockParam] = [TextBlockParam(type="text", text=content)] if content else []
                 uses: list[ContentBlockParam] = [
@@ -125,6 +141,11 @@ def messages(history: Sequence[Message]) -> list[MessageParam]:
                 yield from (convert(m) for m in group)
 
     return list(grouped())
+
+
+def _image(image: Image) -> ImageBlockParam:
+    source = Base64ImageSourceParam(type="base64", media_type=image.media_type, data=b64encode(image.data).decode())
+    return ImageBlockParam(type="image", source=source)
 
 
 def _tool(tool: Tool) -> ToolParam:
