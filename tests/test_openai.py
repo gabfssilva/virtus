@@ -25,7 +25,7 @@ from virtus import (
     tool,
 )
 from virtus.providers import OpenAI
-from virtus.providers.openai import messages
+from virtus.providers.openai import _messages
 
 
 def describe_messages():
@@ -37,7 +37,7 @@ def describe_messages():
             AssistantMessage("It's sunny"),
         )
 
-        assert messages("Be brief.", history) == [
+        assert _messages("Be brief.", history) == [
             {"role": "system", "content": "Be brief."},
             {"role": "user", "content": "Weather?"},
             {
@@ -54,7 +54,7 @@ def describe_messages():
     def it_sends_images_as_data_urls_next_to_the_text():
         history = (UserMessage("What is this?", (Image(b"\x89PNG", "image/png"),)),)
 
-        assert messages("", history) == [
+        assert _messages("", history) == [
             {
                 "role": "user",
                 "content": [

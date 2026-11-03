@@ -31,7 +31,7 @@ from virtus import (
     tool,
 )
 from virtus.providers import Anthropic
-from virtus.providers.anthropic import messages
+from virtus.providers.anthropic import _messages
 
 
 def describe_messages():
@@ -44,7 +44,7 @@ def describe_messages():
             AssistantMessage("It's sunny"),
         )
 
-        assert messages(history) == [
+        assert _messages(history) == [
             {"role": "user", "content": "Weather?"},
             {
                 "role": "assistant",
@@ -67,7 +67,7 @@ def describe_messages():
     def it_sends_images_as_base64_blocks_before_the_text():
         history = (UserMessage("What is this?", (Image(b"\x89PNG", "image/png"),)),)
 
-        assert messages(history) == [
+        assert _messages(history) == [
             {
                 "role": "user",
                 "content": [

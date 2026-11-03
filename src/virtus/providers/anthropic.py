@@ -59,7 +59,7 @@ class Anthropic(Provider):
             model=self.model,
             max_tokens=self.max_tokens,
             system=request.system or omit,
-            messages=messages(request.messages),
+            messages=_messages(request.messages),
             tools=[_tool(t) for t in request.tools] or omit,
             output_config=self._output_config(request.output) or omit,
             stream=True,
@@ -108,7 +108,7 @@ class Anthropic(Provider):
         return f"Anthropic({self.model!r})"
 
 
-def messages(history: Sequence[Message]) -> list[MessageParam]:
+def _messages(history: Sequence[Message]) -> list[MessageParam]:
     """Consecutive tool results share one user message, as the API expects for parallel calls."""
 
     def convert(message: Message) -> MessageParam:
