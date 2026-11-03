@@ -11,11 +11,11 @@ from uuid import uuid4
 
 from pydantic import Field, TypeAdapter, create_model
 
-from liteagent.capability import flatten
-from liteagent.message import AssistantMessage, Event, Message, TextDelta, ToolCall, ToolResult, UserMessage
-from liteagent.provider import Provider
-from liteagent.request import Capability, Conversation, Filter, Next, Request
-from liteagent.tool import Tool, parameters_model
+from virtus.capability import flatten
+from virtus.message import AssistantMessage, Event, Message, TextDelta, ToolCall, ToolResult, UserMessage
+from virtus.provider import Provider
+from virtus.request import Capability, Conversation, Filter, Next, Request
+from virtus.tool import Tool, parameters_model
 
 
 class Agent[**P, Out](Capability):

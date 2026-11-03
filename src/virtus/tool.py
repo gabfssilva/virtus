@@ -8,8 +8,8 @@ from typing import get_type_hints
 from pydantic import BaseModel, create_model
 from pydantic_core import to_json
 
-from liteagent.message import Event, ToolCall, ToolResult
-from liteagent.request import Capability, Filter, Next, Request
+from virtus.message import Event, ToolCall, ToolResult
+from virtus.request import Capability, Filter, Next, Request
 
 
 @dataclass(frozen=True)

@@ -3,7 +3,8 @@ from itertools import count
 
 import pytest
 
-from liteagent import (
+from tests.scripted import Scripted, calls
+from virtus import (
     AssistantMessage,
     Capabilities,
     Event,
@@ -18,7 +19,6 @@ from liteagent import (
     on_message,
     tool,
 )
-from tests.scripted import Scripted, calls
 
 
 def describe_context():

@@ -4,9 +4,9 @@ from dataclasses import dataclass, replace
 from itertools import takewhile
 from types import MethodType
 
-from liteagent.message import Event, Message, TextDelta, UserMessage
-from liteagent.request import Capability, Filter, Next, Request
-from liteagent.tool import Tool
+from virtus.message import Event, Message, TextDelta, UserMessage
+from virtus.request import Capability, Filter, Next, Request
+from virtus.tool import Tool
 
 
 class Capabilities(Capability):

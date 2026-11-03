@@ -1,8 +1,8 @@
 from collections.abc import AsyncIterator
 from typing import Protocol, runtime_checkable
 
-from liteagent.message import AssistantMessage, TextDelta
-from liteagent.request import Request
+from virtus.message import AssistantMessage, TextDelta
+from virtus.request import Request
 
 
 @runtime_checkable

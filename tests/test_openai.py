@@ -3,9 +3,9 @@ import os
 import pytest
 from pydantic import BaseModel
 
-from liteagent import AssistantMessage, ToolCall, ToolResult, UserMessage, agent, tool
-from liteagent.providers import OpenAI
-from liteagent.providers.openai import messages
+from virtus import AssistantMessage, ToolCall, ToolResult, UserMessage, agent, tool
+from virtus.providers import OpenAI
+from virtus.providers.openai import messages
 
 
 def describe_messages():

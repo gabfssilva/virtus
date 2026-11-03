@@ -1,6 +1,6 @@
-from liteagent import AssistantMessage, ToolResult, UserMessage, agent, compaction, tool
-from liteagent.compaction import SUMMARY_PROMPT
 from tests.scripted import Scripted, calls
+from virtus import AssistantMessage, ToolResult, UserMessage, agent, compaction, tool
+from virtus.compaction import SUMMARY_PROMPT
 
 SUMMARY = UserMessage("Summary of the earlier conversation:\n\nAna likes tea")
 

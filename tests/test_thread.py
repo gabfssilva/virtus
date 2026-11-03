@@ -4,7 +4,8 @@ from collections.abc import AsyncIterator
 
 import pytest
 
-from liteagent import (
+from tests.scripted import Scripted, calls
+from virtus import (
     AssistantMessage,
     Capability,
     Provider,
@@ -17,7 +18,6 @@ from liteagent import (
     on_input,
     tool,
 )
-from tests.scripted import Scripted, calls
 
 
 def describe_thread():

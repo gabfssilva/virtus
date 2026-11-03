@@ -1,8 +1,8 @@
 from collections.abc import AsyncIterator, Sequence
 from dataclasses import replace
 
-from liteagent.message import AssistantMessage, Event, Message, ToolResult, UserMessage
-from liteagent.request import Filter, Next, Request
+from virtus.message import AssistantMessage, Event, Message, ToolResult, UserMessage
+from virtus.request import Filter, Next, Request
 
 SUMMARY_PROMPT = (
     "Summarize the conversation below so the summary can replace it. Keep facts, decisions, results "

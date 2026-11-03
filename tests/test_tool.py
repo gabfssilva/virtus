@@ -4,8 +4,8 @@ from typing import Annotated
 import pytest
 from pydantic import Field
 
-from liteagent import AssistantMessage, ToolCall, ToolResult, agent, tool
 from tests.scripted import Scripted, calls
+from virtus import AssistantMessage, ToolCall, ToolResult, agent, tool
 
 
 def describe_tool():

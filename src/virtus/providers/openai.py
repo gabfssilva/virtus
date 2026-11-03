@@ -15,10 +15,10 @@ from openai.types.chat.chat_completion_chunk import ChoiceDeltaToolCall
 from openai.types.chat.chat_completion_message_function_tool_call_param import Function
 from openai.types.chat.completion_create_params import ResponseFormat
 
-from liteagent.message import AssistantMessage, Message, TextDelta, ToolCall, ToolResult, UserMessage
-from liteagent.provider import Provider
-from liteagent.request import Request
-from liteagent.tool import Tool
+from virtus.message import AssistantMessage, Message, TextDelta, ToolCall, ToolResult, UserMessage
+from virtus.provider import Provider
+from virtus.request import Request
+from virtus.tool import Tool
 
 
 class OpenAI(Provider):

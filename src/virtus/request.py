@@ -4,11 +4,11 @@ from collections.abc import AsyncIterator, Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
-from liteagent.message import Event, Message, UserMessage
+from virtus.message import Event, Message, UserMessage
 
 if TYPE_CHECKING:
-    from liteagent.provider import Provider
-    from liteagent.tool import Tool
+    from virtus.provider import Provider
+    from virtus.tool import Tool
 
 
 @dataclass(frozen=True)

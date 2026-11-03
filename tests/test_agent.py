@@ -4,8 +4,8 @@ from collections.abc import AsyncIterator
 import pytest
 from pydantic import BaseModel
 
-from liteagent import AssistantMessage, Event, Next, Request, TextDelta, ToolResult, UserMessage, agent, tool
 from tests.scripted import Scripted, calls
+from virtus import AssistantMessage, Event, Next, Request, TextDelta, ToolResult, UserMessage, agent, tool
 
 
 class City(BaseModel):

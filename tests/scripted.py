@@ -2,7 +2,7 @@ import json
 import re
 from collections.abc import AsyncIterator
 
-from liteagent import AssistantMessage, Provider, Request, TextDelta, ToolCall
+from virtus import AssistantMessage, Provider, Request, TextDelta, ToolCall
 
 
 class Scripted(Provider):
