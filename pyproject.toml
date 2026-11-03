@@ -1,0 +1,39 @@
+[project]
+name = "liteagent"
+version = "0.1.0"
+description = "A minimal async framework for LLM agents"
+requires-python = "==3.12.*"
+dependencies = [
+    "openai>=1.59.6",
+    "pydantic>=2.10.5",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = [
+    "pyrefly>=1.4.0",
+    "pytest>=8.0",
+    "pytest-asyncio>=0.24",
+    "pytest-describe>=2.2",
+    "ruff>=0.8",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+describe_prefixes = ["describe_", "when_"]
+markers = ["integration: calls a real LLM API"]
+addopts = "-m 'not integration'"
+
+[tool.pyrefly]
+project-includes = ["src", "tests"]
+search-path = ["src", "."]
+
+[tool.ruff]
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
