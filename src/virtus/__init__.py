@@ -2,6 +2,7 @@ from virtus.agent import Agent, agent
 from virtus.capability import Capabilities, context, on_input, on_message
 from virtus.compaction import compaction
 from virtus.filter import Capability, Filter, Next
+from virtus.knowledge import Document, Store, knowledge, memory
 from virtus.message import AssistantMessage, Event, Message, TextDelta, ToolCall, ToolResult, UserMessage
 from virtus.output import Snapshot
 from virtus.provider import Provider
@@ -15,6 +16,7 @@ __all__ = [
     "Capabilities",
     "Capability",
     "Conversation",
+    "Document",
     "Event",
     "Filter",
     "Message",
@@ -22,6 +24,7 @@ __all__ = [
     "Provider",
     "Request",
     "Snapshot",
+    "Store",
     "TextDelta",
     "Thread",
     "Tool",
@@ -31,6 +34,8 @@ __all__ = [
     "agent",
     "compaction",
     "context",
+    "knowledge",
+    "memory",
     "on_input",
     "on_message",
     "tool",
