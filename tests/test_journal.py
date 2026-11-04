@@ -9,6 +9,7 @@ from virtus import (
     Delta,
     Image,
     JsonJournal,
+    MemoryJournal,
     Provider,
     Request,
     ToolCall,
@@ -29,6 +30,24 @@ HISTORY = (
 )
 
 
+def describe_memory_journal():
+    def it_keeps_children_under_their_parent_and_deletes_them_together():
+        journal = MemoryJournal()
+        journal.write(("ana",), HISTORY[:1])
+        journal.write(("ana", "researcher", "bees"), HISTORY[:1])
+        journal.write(("ana", "researcher", "bees", "helper", "x"), HISTORY[:1])
+        journal.write(("bia",), HISTORY[:1])
+
+        assert journal.read(("ana",)) == HISTORY[:1]
+        assert journal.read(("nobody",)) is None
+        assert journal.children(("ana",)) == (("researcher", "bees"),)
+
+        journal.delete(("ana",))
+
+        assert journal.read(("ana", "researcher", "bees", "helper", "x")) is None
+        assert journal.read(("bia",)) == HISTORY[:1]
+
+
 def describe_json_journal():
     def it_round_trips_every_kind_of_message(tmp_path: Path):
         journal = JsonJournal(tmp_path)
@@ -47,6 +66,8 @@ def describe_json_journal():
         journal.write(("bia",), HISTORY[:1])
 
         assert (tmp_path / "ana" / "researcher" / "bees.json").exists()
+        assert journal.children(("ana",)) == (("researcher", "bees"),)
+        assert journal.children(("bia",)) == ()
 
         journal.delete(("ana",))
 

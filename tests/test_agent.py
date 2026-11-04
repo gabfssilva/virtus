@@ -6,7 +6,19 @@ import pytest
 from pydantic import BaseModel
 
 from tests.scripted import Scripted, calls
-from virtus import AssistantMessage, Event, Image, Next, Request, TextDelta, ToolResult, UserMessage, agent, tool
+from virtus import (
+    AssistantMessage,
+    Event,
+    Image,
+    MemoryJournal,
+    Next,
+    Request,
+    TextDelta,
+    ToolResult,
+    UserMessage,
+    agent,
+    tool,
+)
 
 
 class City(BaseModel):
@@ -168,14 +180,17 @@ def describe_replace():
         assert [t.name for t in second.requests[0].tools] == ["bark"]
         assert pet.chain == ()
 
-    def it_keeps_threads_apart():
-        @agent(provider=Scripted())
+    async def it_shares_the_journal_unless_one_is_given():
+        @agent(provider=Scripted(AssistantMessage("hi")))
         async def chat(message: str) -> str: ...
 
-        other = chat.replace(system="Be brief.")
+        await chat.thread("u1")("hello")
+        same = chat.replace(system="Be brief.")
+        apart = chat.replace(journal=MemoryJournal())
 
-        assert chat.thread("u1") is not other.thread("u1")
-        assert other.thread("u1").agent is other
+        assert same.thread("u1").agent is same
+        assert same.thread("u1").history == chat.thread("u1").history
+        assert apart.thread("u1").history == ()
 
     async def it_extends_the_capabilities_in_order():
         provider = Scripted(AssistantMessage("ok"))

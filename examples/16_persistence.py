@@ -10,14 +10,18 @@ from virtus.providers import OpenAI
 async def main() -> None:
     with tempfile.TemporaryDirectory() as folder:
 
-        @agent(provider=OpenAI(), system="Answer in one short sentence.", journal=JsonJournal(folder))
+        @agent(
+            provider=OpenAI(), 
+            system="Answer in one short sentence.", 
+            journal=JsonJournal(folder)
+        )
         async def assistant(message: str) -> str: ...
 
         first = assistant.thread("user-42")
         print(await first("My name is Ana and I live in Lisbon."))
 
-        # A copy of the agent stands in for a new process: same journal, same thread id, history from disk.
-        second = assistant.replace().thread("user-42")
+        # Any handle to the id reads the history from the journal, as a new process would.
+        second = assistant.thread("user-42")
         print(f"\nloaded {len(second.history)} messages from disk")
         print(await second("Where do I live?"))
         print(await second.resume())  # nothing pending: the last answer, without a call

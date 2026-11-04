@@ -25,7 +25,8 @@ async def main() -> None:
     print(await thread("Find out how honeybees communicate."))
     print(await thread("Ask the same researcher how that compares to ants."))
 
-    for (name, title), child in thread.children.items():
+    for name, title in thread.children:
+        child = thread.child((name, title), researcher)
         print(f"\n{name} thread {title!r}: {len(child.history)} messages")
 
 

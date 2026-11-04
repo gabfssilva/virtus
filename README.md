@@ -103,18 +103,20 @@ class Todo(Capabilities):
 
 ## Threads
 
-A thread is a conversation kept across calls. Calls on one thread run one at a time.
+A thread is a conversation kept across calls. Its history lives in the agent's journal, in memory by
+default. Calls on one conversation run one at a time.
 
 ```python
-thread = assistant.thread("user-42")      # get or create
+thread = assistant.thread("user-42")      # the conversation with this id, new or under way
 await thread("I need to buy milk.")
 await thread("What's left?")
 thread.history                            # the messages as the provider saw them
 thread.dispose()                          # forget it
 ```
 
-With a journal, threads outlive the process. `thread(id)` loads from it, every completed step is
-written back, and `resume()` finishes a run that was interrupted (or repeats the last answer).
+With a `JsonJournal`, threads outlive the process: every completed step is written to disk,
+`thread(id)` reads it back, and `resume()` finishes a run that was interrupted (or repeats the last
+answer).
 
 ```python
 @agent(provider=OpenAI(), journal=JsonJournal("./threads"))

@@ -1,5 +1,5 @@
 import inspect
-from collections.abc import AsyncIterator, Awaitable, Callable, Mapping, Sequence
+from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
 from dataclasses import dataclass, replace
 from typing import Final, overload
 from uuid import uuid4
@@ -7,7 +7,7 @@ from uuid import uuid4
 from pydantic import BaseModel, Field, create_model
 
 from virtus.capability import flatten
-from virtus.journal import Journal
+from virtus.journal import Journal, MemoryJournal
 from virtus.message import Event, Image, UserMessage
 from virtus.middleware import Capability, Middleware, Next
 from virtus.output import Output, output
@@ -18,7 +18,7 @@ from virtus.tool import Tool, parameters_model
 
 
 class Unset:
-    """Marks a `replace` setting to keep; `None` is a real value for some of them."""
+    """Marks a `replace` setting to keep."""
 
 
 UNSET: Final = Unset()
@@ -56,8 +56,8 @@ class Agent[**P, R](Capability):
         self.description = description or inspect.getdoc(template) or ""
         self.provider = provider
         self.system = system
-        self.journal = journal
-        """Where `thread(id)` keeps conversations across processes; one-off calls are never written."""
+        self.journal: Journal = journal or MemoryJournal()
+        """Where every thread of this agent keeps its history; one-off calls are never written to it."""
         self.output: Final[Output[R]] = output
         self.capabilities: Final[tuple[Capability | Middleware, ...]] = tuple(capabilities)
         self.chain: tuple[Middleware, ...] = flatten(capabilities)
@@ -66,7 +66,6 @@ class Agent[**P, R](Capability):
         self._template = template
         self._signature = signature
         self._prompt = inspect.getdoc(template) or "\n\n".join(f"{{{p}}}" for p in signature.parameters)
-        self._threads: Mapping[str, Thread[P, R]] = {}
 
         if not self._prompt:
             raise TypeError(f"{self.name}: an agent needs parameters or a docstring")
@@ -84,9 +83,10 @@ class Agent[**P, R](Capability):
         description: str | Unset = UNSET,
         system: str | Unset = UNSET,
         capabilities: Sequence[Capability | Middleware] | Unset = UNSET,
-        journal: Journal | Unset | None = UNSET,
+        journal: Journal | Unset = UNSET,
     ) -> "Agent[P, R]":
-        """A copy with these settings changed; same template and output mode, its own threads.
+        """A copy with these settings changed; same template and output mode, and the same journal unless
+        one is given, so both see the same threads.
 
         `capabilities` replaces the whole list; `extend` appends to it.
         """
@@ -110,20 +110,11 @@ class Agent[**P, R](Capability):
         return self.replace(capabilities=(*self.capabilities, *capabilities))
 
     def thread(self, id: str | None = None) -> Thread[P, R]:
-        """Return the thread with this id, from memory or the journal, creating it if needed.
+        """A handle to the conversation with this id in the journal, new or already under way.
 
-        Without an id, create a new one.
+        Without an id, start a new one.
         """
-        key = id or uuid4().hex
-        if found := self._threads.get(key):
-            return found
-
-        def detach() -> None:
-            self._threads = {k: t for k, t in self._threads.items() if k != key}
-
-        created = Thread(self, (key,), detach, journal=self.journal)
-        self._threads = {**self._threads, key: created}
-        return created
+        return Thread(self, (id or uuid4().hex,), self.journal)
 
     def input(self, *args: object, **kwargs: object) -> UserMessage:
         """The user message a call with these arguments sends.

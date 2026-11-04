@@ -127,12 +127,21 @@ def describe_thread():
 
 
 def describe_agent_thread():
-    def it_returns_the_same_thread_for_the_same_id():
-        @agent(provider=Scripted())
+    async def it_is_the_same_conversation_for_the_same_id():
+        provider = Scripted(AssistantMessage("Hi Ana"), AssistantMessage("Your name is Ana"))
+
+        @agent(provider=provider)
         async def chat(message: str) -> str: ...
 
-        assert chat.thread("user-42") is chat.thread("user-42")
+        await chat.thread("user-42")("I'm Ana")
+        await chat.thread("user-42")("What's my name?")
+
         assert chat.thread("user-42").id == "user-42"
+        assert provider.requests[1].messages == (
+            UserMessage("I'm Ana"),
+            AssistantMessage("Hi Ana"),
+            UserMessage("What's my name?"),
+        )
 
     def it_creates_a_new_thread_when_no_id_is_given():
         @agent(provider=Scripted())
@@ -140,35 +149,35 @@ def describe_agent_thread():
 
         first, second = chat.thread(), chat.thread()
 
-        assert first is not second
-        assert chat.thread(first.id) is first
+        assert first.id != second.id
+        assert chat.thread(first.id).path == first.path
 
-    async def it_forgets_a_disposed_thread():
+    async def it_runs_calls_on_one_conversation_one_at_a_time():
+        @agent(provider=Scripted(AssistantMessage("one"), AssistantMessage("two")))
+        async def chat(message: str) -> str: ...
+
+        await asyncio.gather(chat.thread("user-42")("first"), chat.thread("user-42")("second"))
+
+        assert chat.thread("user-42").history == (
+            UserMessage("first"),
+            AssistantMessage("one"),
+            UserMessage("second"),
+            AssistantMessage("two"),
+        )
+
+    async def it_starts_over_after_dispose():
         provider = Scripted(AssistantMessage("one"), AssistantMessage("two"))
 
         @agent(provider=provider)
         async def chat(message: str) -> str: ...
 
-        disposed = chat.thread("user-42")
-        await disposed("first")
-        disposed.dispose()
-
-        fresh = chat.thread("user-42")
-        await fresh("second")
-
-        assert fresh is not disposed
-        assert disposed.history == ()
-        assert provider.requests[1].messages == (UserMessage("second"),)
-
-    async def it_refuses_calls_after_dispose():
-        @agent(provider=Scripted(AssistantMessage("one")))
-        async def chat(message: str) -> str: ...
-
-        thread = chat.thread()
+        thread = chat.thread("user-42")
+        await thread("first")
         thread.dispose()
 
-        with pytest.raises(RuntimeError, match="disposed"):
-            await thread("hello")
+        assert thread.history == ()
+        await chat.thread("user-42")("second")
+        assert provider.requests[1].messages == (UserMessage("second"),)
 
     def it_rejects_a_parameter_named_thread():
         with pytest.raises(TypeError, match="reserved"):
@@ -230,8 +239,9 @@ def describe_delegation():
 
     async def it_scopes_threads_to_the_calling_conversation():
         research = Scripted(AssistantMessage("for ana"), AssistantMessage("for bia"))
+        researcher = _researcher_with(research)
         lead = _lead_for(
-            _researcher_with(research),
+            researcher,
             Scripted(
                 _delegation({"topic": "bees", "thread": "x"}),
                 AssistantMessage("done"),
@@ -244,8 +254,8 @@ def describe_delegation():
         await lead.thread("bia")("go")
 
         assert research.requests[1].messages == (UserMessage("Research wasps"),)
-        assert set(lead.thread("ana").children) == {("researcher", "x")}
-        assert lead.thread("ana").children["researcher", "x"].id == "ana/researcher/x"
+        assert lead.thread("ana").children == (("researcher", "x"),)
+        assert lead.thread("ana").child(("researcher", "x"), researcher).id == "ana/researcher/x"
 
     async def it_tells_the_model_which_conversations_are_open():
         lead_provider = Scripted(_delegation({"topic": "bees", "thread": "insects"}), AssistantMessage("done"))
@@ -257,17 +267,19 @@ def describe_delegation():
         assert lead_provider.requests[1].system == "Open conversations with researcher: insects"
 
     async def it_disposes_child_threads_with_the_parent():
+        researcher = _researcher_with(Scripted(AssistantMessage("ok")))
         lead = _lead_for(
-            _researcher_with(Scripted(AssistantMessage("ok"))),
+            researcher,
             Scripted(_delegation({"topic": "bees", "thread": "insects"}), AssistantMessage("done")),
         )
         parent = lead.thread()
         await parent("go")
-        child = parent.children["researcher", "insects"]
+        child = parent.child(("researcher", "insects"), researcher)
+        assert child.history != ()
 
         parent.dispose()
 
-        assert parent.children == {}
+        assert parent.children == ()
         assert child.history == ()
 
     async def it_shares_a_thread_passed_as_a_capability():

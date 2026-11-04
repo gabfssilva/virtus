@@ -1,14 +1,14 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import AsyncIterator, Callable, Mapping
+from collections.abc import AsyncIterator, Sequence
 from functools import reduce
 from itertools import count
-from types import MappingProxyType
 from typing import TYPE_CHECKING, Final, Protocol, runtime_checkable
 from uuid import uuid4
+from weakref import WeakValueDictionary
 
-from virtus.journal import Journal
+from virtus.journal import Journal, MemoryJournal
 from virtus.message import AssistantMessage, Event, Message, TextDelta, ToolCall, ToolCallDelta, ToolResult, UserMessage
 from virtus.middleware import Capability, Middleware, Next
 from virtus.request import Request
@@ -33,8 +33,8 @@ class Conversation(Protocol):
     def history(self) -> tuple[Message, ...]: ...
 
     @property
-    def children(self) -> Mapping[tuple[str, str], Conversation]:
-        """Threads opened by delegation from this one, keyed by (agent name, thread name)."""
+    def children(self) -> Sequence[tuple[str, str]]:
+        """(agent name, thread name) of the threads opened by delegation from this one."""
         ...
 
     def dispose(self) -> None: ...
@@ -44,41 +44,30 @@ class Conversation(Protocol):
         ...
 
     def child(self, key: tuple[str, str], agent: Agent[..., object]) -> Conversation:
-        """Return the child under `key`, or open one with `agent` and register it."""
+        """The thread under `key`, served by `agent`, in the same journal."""
         ...
 
 
 class Thread[**P, R](Capability, Conversation):
     """A conversation with an agent, kept across calls.
 
-    The history holds what the provider actually received, after middleware such as redaction or
-    compaction, plus the replies, so those rewrites carry over to later turns. It is updated after
-    each completed step: a turn rejected by a middleware leaves it unchanged. Calls on the same thread
-    run one at a time.
+    A thread is a handle: its state is the history in the journal, read before each run and written after
+    each completed step. The history holds what the provider actually received, after middleware such as
+    redaction or compaction, plus the replies, so those rewrites carry over to later turns; a turn rejected
+    by a middleware leaves it unchanged. Handles to the same conversation in one process run one at a time.
 
-    With a `journal`, the history is loaded from it on creation and written back after every step, so
-    the thread survives the process; see `resume`. Threads opened from this one by delegation share it.
+    Without a journal of its own the thread gets a private `MemoryJournal`, which is what one-off calls
+    use: nothing of theirs reaches the agent's journal.
 
     Used as a capability, every delegation from any caller goes to this one thread.
     """
 
-    def __init__(
-        self,
-        agent: Agent[P, R],
-        path: tuple[str, ...] | None = None,
-        detach: Callable[[], object] = lambda: None,
-        *,
-        journal: Journal | None = None,
-    ):
+    def __init__(self, agent: Agent[P, R], path: tuple[str, ...] | None = None, journal: Journal | None = None):
         self.agent: Final[Agent[P, R]] = agent
-        self.id = "/".join(path or (uuid4().hex,))
-        self._path = path or (self.id,)
-        self._journal = journal
-        self._history: list[Message] = list(journal.read(self._path) or ()) if journal else []
-        self._children: dict[tuple[str, str], Conversation] = {}
-        self._detach = detach
-        self._disposed = False
-        self._lock = asyncio.Lock()
+        self._path = path or (uuid4().hex,)
+        self.id = "/".join(self._path)
+        self._journal = journal or MemoryJournal()
+        self._lock = _lock(self._journal, self._path)
 
     @property
     def path(self) -> tuple[str, ...]:
@@ -86,11 +75,11 @@ class Thread[**P, R](Capability, Conversation):
 
     @property
     def history(self) -> tuple[Message, ...]:
-        return tuple(self._history)
+        return tuple(self._journal.read(self._path) or ())
 
     @property
-    def children(self) -> Mapping[tuple[str, str], Conversation]:
-        return MappingProxyType(self._children)
+    def children(self) -> Sequence[tuple[str, str]]:
+        return self._journal.children(self._path)
 
     def __call__(self, *args: P.args, **kwargs: P.kwargs) -> R:
         return self.agent.output.consume(self._stream(self.agent.input(*args, **kwargs)))
@@ -104,17 +93,8 @@ class Thread[**P, R](Capability, Conversation):
         return self.agent.output.consume(self._stream(None))
 
     def dispose(self) -> None:
-        """Forget the conversation and the threads opened from it, and unregister it from its agent.
-
-        A disposed thread refuses further calls; get a fresh one from the agent instead.
-        """
-        for child in list(self._children.values()):
-            child.dispose()
-        self._history.clear()
-        if self._journal:
-            self._journal.delete(self.path)
-        self._disposed = True
-        self._detach()
+        """Delete the conversation and the threads opened from it from the journal."""
+        self._journal.delete(self._path)
 
     def middleware(self) -> tuple[Middleware, ...]:
         async def run(**arguments: object) -> object:
@@ -126,17 +106,9 @@ class Thread[**P, R](Capability, Conversation):
         return await self.agent.output.final(self._stream(message))
 
     def child(self, key: tuple[str, str], agent: Agent[..., object]) -> Conversation:
-        if found := self._children.get(key):
-            return found
-
-        created = Thread(agent, (*self.path, *key), lambda: self._children.pop(key, None), journal=self._journal)
-        self._children[key] = created
-        return created
+        return Thread(agent, (*self._path, *key), self._journal)
 
     async def _stream(self, message: UserMessage | None) -> AsyncIterator[Event]:
-        if self._disposed:
-            raise RuntimeError(f"{self.agent.name}: thread {self.id!r} was disposed")
-
         async with self._lock:
             async for event in self._run(message):
                 yield event
@@ -149,7 +121,7 @@ class Thread[**P, R](Capability, Conversation):
         """
         agent = self.agent
         sent: list[Request] = []
-        pending = [*self._history, message] if message else [*self._history]
+        pending = [*self.history, message] if message else [*self.history]
 
         match pending:
             case []:
@@ -207,12 +179,22 @@ class Thread[**P, R](Capability, Conversation):
                 yield event
 
             pending = [*(sent[-1].messages if sent else pending), *produced]
-            self._history[:] = pending
-            if self._journal:
-                self._journal.write(self.path, pending)
+            self._journal.write(self._path, pending)
 
             match produced:
                 case [*_, ToolResult()]:
                     continue
                 case _:
                     return
+
+
+_locks: WeakValueDictionary[tuple[int, tuple[str, ...]], asyncio.Lock] = WeakValueDictionary()
+
+
+def _lock(journal: Journal, path: tuple[str, ...]) -> asyncio.Lock:
+    """One lock per conversation, shared by every handle to it and dropped with the last one."""
+    key = (id(journal), path)
+    if found := _locks.get(key):
+        return found
+    lock = _locks[key] = asyncio.Lock()
+    return lock

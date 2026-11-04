@@ -1,4 +1,4 @@
-"""A thread keeps the conversation between calls. The same id returns the same thread."""
+"""A thread keeps the conversation between calls. The same id is the same conversation."""
 
 import asyncio
 

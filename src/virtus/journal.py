@@ -1,10 +1,11 @@
-"""Where threads keep their history, so a conversation outlives the process and an interrupted run resumes.
+"""Where threads keep their history: the only state a conversation has, so it outlives the process and resumes.
 
-A thread with a journal writes its whole history after every completed step, the same moment the
-in-memory history changes. The history is all the framework needs to continue: tool calls never sit
-without their results in it, and rewrites made by middleware are already applied. State that lives
-elsewhere (a `Capabilities` instance, a kernel) is not covered; what needs to survive goes to disk by
-its owner, or is rebuilt from the history.
+A thread holds no messages of its own; it reads its history from the journal before each run and writes
+it back after every completed step. `MemoryJournal` is the default and lives as long as the agent;
+`JsonJournal` puts the same thing on disk. The history is all the framework needs to continue: tool calls
+never sit without their results in it, and rewrites made by middleware are already applied. State that
+lives elsewhere (a `Capabilities` instance, a kernel) is not covered; what needs to survive goes to disk
+by its owner, or is rebuilt from the history.
 """
 
 import shutil
@@ -12,7 +13,7 @@ from base64 import b64decode, b64encode
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Annotated, Literal, Protocol, runtime_checkable
-from urllib.parse import quote
+from urllib.parse import quote, unquote
 
 from pydantic import BaseModel, Field, TypeAdapter
 
@@ -22,7 +23,8 @@ from virtus.message import AssistantMessage, Image, MediaType, Message, ToolCall
 @runtime_checkable
 class Journal(Protocol):
     """`path` is `(id,)` for a root thread; a thread opened by delegation appends the agent name and the
-    conversation name to its parent's path. `delete` removes the thread and every thread under it.
+    conversation name to its parent's path. `delete` removes the thread and every thread under it;
+    `children` lists the (agent name, conversation name) pairs directly under a thread.
     """
 
     def read(self, path: Sequence[str]) -> tuple[Message, ...] | None: ...
@@ -30,6 +32,30 @@ class Journal(Protocol):
     def write(self, path: Sequence[str], history: Sequence[Message]) -> None: ...
 
     def delete(self, path: Sequence[str]) -> None: ...
+
+    def children(self, path: Sequence[str]) -> Sequence[tuple[str, str]]: ...
+
+
+class MemoryJournal(Journal):
+    """Threads kept in a dict, for as long as the journal is referenced."""
+
+    def __init__(self) -> None:
+        self._threads: dict[tuple[str, ...], tuple[Message, ...]] = {}
+
+    def read(self, path: Sequence[str]) -> tuple[Message, ...] | None:
+        return self._threads.get(tuple(path))
+
+    def write(self, path: Sequence[str], history: Sequence[Message]) -> None:
+        self._threads[tuple(path)] = tuple(history)
+
+    def delete(self, path: Sequence[str]) -> None:
+        prefix = tuple(path)
+        for key in [k for k in self._threads if k[: len(prefix)] == prefix]:
+            del self._threads[key]
+
+    def children(self, path: Sequence[str]) -> tuple[tuple[str, str], ...]:
+        prefix = tuple(path)
+        return tuple((k[-2], k[-1]) for k in self._threads if len(k) == len(prefix) + 2 and k[: len(prefix)] == prefix)
 
 
 class JsonJournal(Journal):
@@ -55,6 +81,17 @@ class JsonJournal(Journal):
     def delete(self, path: Sequence[str]) -> None:
         self._file(path).unlink(missing_ok=True)
         shutil.rmtree(self._file(path).with_suffix(""), ignore_errors=True)
+
+    def children(self, path: Sequence[str]) -> tuple[tuple[str, str], ...]:
+        folder = self._file(path).with_suffix("")
+        if not folder.is_dir():
+            return ()
+        return tuple(
+            (unquote(agent.name), unquote(file.stem))
+            for agent in sorted(folder.iterdir())
+            if agent.is_dir()
+            for file in sorted(agent.glob("*.json"))
+        )
 
     def _file(self, path: Sequence[str]) -> Path:
         """Each segment becomes one file-system name; percent-encoding keeps `/` and `..` out of it."""
