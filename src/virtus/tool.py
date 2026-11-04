@@ -8,8 +8,8 @@ from typing import get_type_hints
 from pydantic import BaseModel, create_model
 from pydantic_core import to_json
 
-from virtus.filter import Capability, Filter, Next
 from virtus.message import Event, Image, ToolCall, ToolResult
+from virtus.middleware import Capability, Middleware, Next
 from virtus.request import Request
 
 
@@ -23,7 +23,7 @@ class Tool(Capability):
     def __get__(self, instance: object | None, owner: type | None = None) -> "Tool":
         return self if instance is None else replace(self, function=MethodType(self.function, instance))
 
-    def filters(self) -> tuple[Filter, ...]:
+    def middleware(self) -> tuple[Middleware, ...]:
         async def provide(request: Request, next: Next) -> AsyncIterator[Event]:
             async for event in next(replace(request, tools=(*request.tools, self))):
                 yield event

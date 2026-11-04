@@ -1,4 +1,4 @@
-"""`AsyncIterator[str]` streams the answer's text; `AsyncIterator[Event]` streams everything filters see,
+"""`AsyncIterator[str]` streams the answer's text; `AsyncIterator[Event]` streams everything middleware sees,
 including tool call arguments as the model writes them."""
 
 import asyncio

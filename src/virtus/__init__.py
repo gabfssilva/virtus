@@ -1,7 +1,6 @@
 from virtus.agent import Agent, agent
 from virtus.capability import Capabilities, context, on_input, on_message
 from virtus.compaction import compaction
-from virtus.filter import Capability, Filter, Next
 from virtus.knowledge import Document, Store, knowledge, memory
 from virtus.message import (
     AssistantMessage,
@@ -16,6 +15,7 @@ from virtus.message import (
     ToolResult,
     UserMessage,
 )
+from virtus.middleware import Capability, Middleware, Next
 from virtus.output import Snapshot
 from virtus.provider import Provider
 from virtus.request import Request
@@ -31,10 +31,10 @@ __all__ = [
     "Delta",
     "Document",
     "Event",
-    "Filter",
     "Image",
     "MediaType",
     "Message",
+    "Middleware",
     "Next",
     "Provider",
     "Request",

@@ -1,11 +1,11 @@
-"""A raw filter wraps each step: it can time it, stop the run, or swap the provider for one call."""
+"""A raw middleware wraps each step: it can time it, stop the run, or swap the provider for one call."""
 
 import asyncio
 from collections.abc import AsyncIterator
 from dataclasses import replace
 from time import perf_counter
 
-from virtus import Event, Filter, Next, Provider, Request, agent, tool
+from virtus import Event, Middleware, Next, Provider, Request, agent, tool
 from virtus.providers import OpenAI
 
 
@@ -16,7 +16,7 @@ async def timing(request: Request, next: Next) -> AsyncIterator[Event]:
     print(f"  [step {request.iteration} took {perf_counter() - started:.2f}s]")
 
 
-def max_steps(limit: int) -> Filter:
+def max_steps(limit: int) -> Middleware:
     async def enforce(request: Request, next: Next) -> AsyncIterator[Event]:
         if request.iteration >= limit:
             raise RuntimeError(f"gave up after {limit} steps")
@@ -26,7 +26,7 @@ def max_steps(limit: int) -> Filter:
     return enforce
 
 
-def escalate_to(provider: Provider, after: int) -> Filter:
+def escalate_to(provider: Provider, after: int) -> Middleware:
     """Use a stronger model once the cheap one has spent `after` rounds calling tools."""
 
     async def swap(request: Request, next: Next) -> AsyncIterator[Event]:

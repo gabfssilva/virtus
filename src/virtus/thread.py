@@ -8,8 +8,8 @@ from types import MappingProxyType
 from typing import TYPE_CHECKING, Final, Protocol, runtime_checkable
 from uuid import uuid4
 
-from virtus.filter import Capability, Filter, Next
 from virtus.message import AssistantMessage, Event, Message, TextDelta, ToolCall, ToolCallDelta, ToolResult, UserMessage
+from virtus.middleware import Capability, Middleware, Next
 from virtus.request import Request
 from virtus.tool import Tool
 
@@ -19,7 +19,7 @@ if TYPE_CHECKING:
 
 @runtime_checkable
 class Conversation(Protocol):
-    """What filters and parent threads see of a thread, independent of its agent's types."""
+    """What middleware and parent threads see of a thread, independent of its agent's types."""
 
     id: str
 
@@ -45,9 +45,9 @@ class Conversation(Protocol):
 class Thread[**P, R](Capability, Conversation):
     """A conversation with an agent, kept across calls.
 
-    The history holds what the provider actually received, after filters such as redaction or
+    The history holds what the provider actually received, after middleware such as redaction or
     compaction, plus the replies, so those rewrites carry over to later turns. It is updated after
-    each completed step: a turn rejected by a filter leaves it unchanged. Calls on the same thread
+    each completed step: a turn rejected by a middleware leaves it unchanged. Calls on the same thread
     run one at a time.
 
     Used as a capability, every delegation from any caller goes to this one thread.
@@ -84,11 +84,11 @@ class Thread[**P, R](Capability, Conversation):
         self._disposed = True
         self._detach()
 
-    def filters(self) -> tuple[Filter, ...]:
+    def middleware(self) -> tuple[Middleware, ...]:
         async def run(**arguments: object) -> object:
             return await self.send(self.agent.input(**arguments))
 
-        return Tool(self.agent.name, self.agent.description, self.agent.parameters, run).filters()
+        return Tool(self.agent.name, self.agent.description, self.agent.parameters, run).middleware()
 
     async def send(self, message: UserMessage) -> object:
         return await self.agent.output.final(self._stream(message))
@@ -138,7 +138,7 @@ class Thread[**P, R](Capability, Conversation):
             for task in tasks:
                 yield task.result()
 
-        def link(inner: Next, outer: Filter) -> Next:
+        def link(inner: Next, outer: Middleware) -> Next:
             return lambda request: outer(request, inner)
 
         innermost: Next = terminal

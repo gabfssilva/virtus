@@ -16,8 +16,8 @@ from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from pathlib import Path
 
-from virtus.filter import Filter, Next
 from virtus.message import Event
+from virtus.middleware import Middleware, Next
 from virtus.request import Request
 from virtus.tool import Tool, tool
 
@@ -82,7 +82,7 @@ class Store:
         return [document for value, document in ranked[:limit] if value > 0]
 
 
-def knowledge(*paths: str | Path, name: str = "knowledge", max_tokens: int = 4_000) -> Filter:
+def knowledge(*paths: str | Path, name: str = "knowledge", max_tokens: int = 4_000) -> Middleware:
     """Let the agent consult `.md` and `.txt` files, or whole directories of them, read-only.
 
     `name` prefixes the tools and the section in the system prompt, so two knowledge bases can
@@ -98,7 +98,7 @@ def knowledge(*paths: str | Path, name: str = "knowledge", max_tokens: int = 4_0
     )
 
 
-def memory(path: str | Path, *, name: str = "memory", max_tokens: int = 4_000) -> Filter:
+def memory(path: str | Path, *, name: str = "memory", max_tokens: int = 4_000) -> Middleware:
     """Give the agent a directory of markdown notes it writes and reads back in later conversations.
 
     Each note is a file named after its title, with the title and creation time in frontmatter.
@@ -144,7 +144,7 @@ def load(file: Path, id: str) -> Document:
     return Document(id, file.stem, body.strip(), file)
 
 
-def _consult(store: Store, name: str, max_tokens: int, *, intro: str, manage: tuple[Tool, ...]) -> Filter:
+def _consult(store: Store, name: str, max_tokens: int, *, intro: str, manage: tuple[Tool, ...]) -> Middleware:
     def read(id: str) -> str:
         if (document := store.read(id)) is None:
             raise FileNotFoundError(f"no entry {id!r}")

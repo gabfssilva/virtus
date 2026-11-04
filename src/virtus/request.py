@@ -14,9 +14,9 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True)
 class Request:
-    """One call to the provider, as seen and rewritten by filters.
+    """One call to the provider, as seen and rewritten by middleware.
 
-    The `messages` that reach the provider become the conversation history, so a filter that
+    The `messages` that reach the provider become the conversation history, so a middleware that
     rewrites them (redaction, compaction) changes what is remembered, not only what is sent.
     """
 
@@ -28,6 +28,6 @@ class Request:
     iteration: int
     """0 for the first provider call of a run, incremented after each round of tool calls."""
     provider: Provider
-    """The provider this step will call; filters may also use it directly, e.g. to summarize."""
+    """The provider this step will call; middleware may also use it directly, e.g. to summarize."""
     thread: Conversation
     """The conversation this request belongs to."""

@@ -7,8 +7,8 @@ from uuid import uuid4
 from pydantic import BaseModel, Field, create_model
 
 from virtus.capability import flatten
-from virtus.filter import Capability, Filter, Next
 from virtus.message import Event, Image, UserMessage
+from virtus.middleware import Capability, Middleware, Next
 from virtus.output import Output, output
 from virtus.provider import Provider
 from virtus.request import Request
@@ -39,7 +39,7 @@ class Agent[**P, R](Capability):
         name: str | None = None,
         description: str | None = None,
         system: str = "",
-        capabilities: Sequence[Capability | Filter] = (),
+        capabilities: Sequence[Capability | Middleware] = (),
     ) -> None:
         signature = inspect.signature(template)
 
@@ -48,8 +48,8 @@ class Agent[**P, R](Capability):
         self.provider = provider
         self.system = system
         self.output: Final[Output[R]] = output
-        self.chain: tuple[Filter, ...] = flatten(capabilities)
-        """Filters applied around each step of a run, outermost first."""
+        self.chain: tuple[Middleware, ...] = flatten(capabilities)
+        """Middleware applied around each step of a run, outermost first."""
         self.parameters: type[BaseModel] = parameters_model(template)
         self._signature = signature
         self._prompt = inspect.getdoc(template) or "\n\n".join(f"{{{p}}}" for p in signature.parameters)
@@ -89,7 +89,7 @@ class Agent[**P, R](Capability):
         text = {name: "[image]" if Image.found_in(value) else value for name, value in bound.arguments.items()}
         return UserMessage(self._prompt.format(**text), images)
 
-    def filters(self) -> tuple[Filter, ...]:
+    def middleware(self) -> tuple[Middleware, ...]:
         parameters = create_model(
             self.name,
             __base__=self.parameters,
@@ -132,7 +132,7 @@ def agent(
     name: str | None = None,
     description: str | None = None,
     system: str = "",
-    capabilities: Sequence[Capability | Filter] = (),
+    capabilities: Sequence[Capability | Middleware] = (),
 ) -> "Decorator":
     """Turn an async template function into an `Agent`; see `virtus.output` for the return types."""
     return Decorator(provider, name, description, system, capabilities)
@@ -144,7 +144,7 @@ class Decorator:
     name: str | None
     description: str | None
     system: str
-    capabilities: Sequence[Capability | Filter]
+    capabilities: Sequence[Capability | Middleware]
 
     @overload
     def __call__[**P, T](self, template: Callable[P, Awaitable[AsyncIterator[T]]]) -> Agent[P, AsyncIterator[T]]: ...

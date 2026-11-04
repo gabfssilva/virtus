@@ -1,8 +1,8 @@
 from collections.abc import AsyncIterator, Sequence
 from dataclasses import replace
 
-from virtus.filter import Filter, Next
 from virtus.message import AssistantMessage, Event, Message, ToolResult, UserMessage
+from virtus.middleware import Middleware, Next
 from virtus.request import Request
 
 SUMMARY_PROMPT = (
@@ -11,7 +11,7 @@ SUMMARY_PROMPT = (
 )
 
 
-def compaction(max_tokens: int = 32_000, keep: int = 8) -> Filter:
+def compaction(max_tokens: int = 32_000, keep: int = 8) -> Middleware:
     """Replace older messages with a summary once the conversation exceeds `max_tokens`.
 
     Tokens are estimated as four characters each. At least the last `keep` messages stay verbatim;

@@ -139,7 +139,7 @@ Both scale retrieval to the volume: inline while it fits, then an index plus `re
 async def support(message: str) -> str: ...
 ```
 
-## Hooks and filters
+## Hooks and middleware
 
 `@on_input` rewrites or rejects each new user message; `@on_message` sees every complete message.
 Rewrites become the history, so a redaction holds for the rest of the conversation.
@@ -150,8 +150,8 @@ def redact_cards(message: UserMessage) -> UserMessage:
     return UserMessage(CARD.sub("[card number]", message.content))
 ```
 
-Under all of these is one primitive: a filter wrapping each step (one provider call plus the tool
-calls it requested). Raw filters can time, retry, stop the run or swap the provider.
+Under all of these is one primitive: a middleware wrapping each step (one provider call plus the tool
+calls it requested). Raw middleware can time, retry, stop the run or swap the provider.
 
 ```python
 async def timing(request: Request, next: Next) -> AsyncIterator[Event]:
@@ -161,7 +161,7 @@ async def timing(request: Request, next: Next) -> AsyncIterator[Event]:
     print(f"step {request.iteration} took {perf_counter() - started:.2f}s")
 ```
 
-`compaction(max_tokens=32_000, keep=8)` is a filter that summarizes older messages with the same
+`compaction(max_tokens=32_000, keep=8)` is a middleware that summarizes older messages with the same
 provider once the conversation grows past the limit.
 
 ## Images

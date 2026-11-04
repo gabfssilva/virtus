@@ -2,7 +2,7 @@
 
 `-> T`                     awaitable: the final answer parsed as `T`
 `-> AsyncIterator[str]`    the answer's text as it is generated
-`-> AsyncIterator[Event]`  the raw events filters see; a union of event types keeps only those
+`-> AsyncIterator[Event]`  the raw events middleware sees; a union of event types keeps only those
 `-> AsyncIterator[T]`      the answer is a `list[T]`; each item is emitted as soon as it is complete
 `-> Snapshot[T]`           the answer is a `T`, emitted again with more of it filled in as it grows
 """

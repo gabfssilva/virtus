@@ -4,8 +4,8 @@ from dataclasses import dataclass, replace
 from itertools import takewhile
 from types import MethodType
 
-from virtus.filter import Capability, Filter, Next
 from virtus.message import Event, Message, TextDelta, ToolCallDelta, UserMessage
+from virtus.middleware import Capability, Middleware, Next
 from virtus.request import Request
 from virtus.tool import Tool
 
@@ -16,7 +16,7 @@ class Capabilities(Capability):
     Tool names are prefixed with the class name in snake case: `Memory.remember` -> `memory__remember`.
     """
 
-    def filters(self) -> tuple[Filter, ...]:
+    def middleware(self) -> tuple[Middleware, ...]:
         prefix = re.sub(r"(?<!^)(?=[A-Z])", "_", type(self).__name__).lower()
         names = dict.fromkeys(
             name
@@ -25,14 +25,14 @@ class Capabilities(Capability):
             if isinstance(value, Capability)
         )
 
-        def member_filters(name: str) -> Iterator[Filter]:
+        def member_middleware(name: str) -> Iterator[Middleware]:
             match getattr(self, name):
                 case Tool() as tool:
-                    yield from replace(tool, name=f"{prefix}__{tool.name}").filters()
+                    yield from replace(tool, name=f"{prefix}__{tool.name}").middleware()
                 case Capability() as capability:
-                    yield from capability.filters()
+                    yield from capability.middleware()
 
-        return tuple(f for name in names for f in member_filters(name))
+        return tuple(f for name in names for f in member_middleware(name))
 
 
 @dataclass(frozen=True)
@@ -42,7 +42,7 @@ class Context(Capability):
     def __get__(self, instance: object | None, owner: type | None = None) -> "Context":
         return self if instance is None else replace(self, function=MethodType(self.function, instance))
 
-    def filters(self) -> tuple[Filter, ...]:
+    def middleware(self) -> tuple[Middleware, ...]:
         async def add(request: Request, next: Next) -> AsyncIterator[Event]:
             text = await _resolve(self.function())
             system = "\n\n".join(part for part in (request.system, text) if part)
@@ -59,7 +59,7 @@ class OnInput(Capability):
     def __get__(self, instance: object | None, owner: type | None = None) -> "OnInput":
         return self if instance is None else replace(self, function=MethodType(self.function, instance))
 
-    def filters(self) -> tuple[Filter, ...]:
+    def middleware(self) -> tuple[Middleware, ...]:
         async def rewrite(request: Request, next: Next) -> AsyncIterator[Event]:
             if request.iteration == 0:
                 request = replace(request, messages=await self._rewrite(request.messages))
@@ -89,7 +89,7 @@ class OnMessage(Capability):
     def __get__(self, instance: object | None, owner: type | None = None) -> "OnMessage":
         return self if instance is None else replace(self, function=MethodType(self.function, instance))
 
-    def filters(self) -> tuple[Filter, ...]:
+    def middleware(self) -> tuple[Middleware, ...]:
         async def apply(request: Request, next: Next) -> AsyncIterator[Event]:
             async for event in next(request):
                 match event:
@@ -118,8 +118,8 @@ def on_message(function: Callable[..., Message | Awaitable[Message]]) -> OnMessa
     return OnMessage(function)
 
 
-def flatten(capabilities: Sequence[Capability | Filter]) -> tuple[Filter, ...]:
-    return tuple(f for c in capabilities for f in (c.filters() if isinstance(c, Capability) else (c,)))
+def flatten(capabilities: Sequence[Capability | Middleware]) -> tuple[Middleware, ...]:
+    return tuple(f for c in capabilities for f in (c.middleware() if isinstance(c, Capability) else (c,)))
 
 
 async def _resolve[T](value: T | Awaitable[T]) -> T:
