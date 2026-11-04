@@ -92,7 +92,7 @@ class RealtimeSession(Session):
                 case ResponseFunctionCallArgumentsDoneEvent(call_id=call_id, name=name, arguments=arguments):
                     calls.append(ToolCall(call_id, name, arguments))
                     yield ToolCallDelta(call_id, name, arguments)
-                case RealtimeErrorEvent(error=error):
+                case RealtimeErrorEvent(error=error) if error.code != "response_cancel_not_active":
                     raise RuntimeError(f"realtime {error.code or error.type}: {error.message}")
                 case ResponseDoneEvent(response=response):
                     if response.status == "failed":
@@ -110,6 +110,8 @@ class RealtimeSession(Session):
         await self._connection.conversation.item.create(item=item)
 
     async def interrupt(self, heard_ms: int) -> None:
+        """The model finishes generating long before playback ends, so the cancel usually finds nothing to
+        stop and the server says so; that error is ignored in `respond`. The truncation is what matters."""
         await self._connection.response.cancel()
         if self._reply:
             item = self._connection.conversation.item

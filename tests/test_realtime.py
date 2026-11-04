@@ -162,6 +162,21 @@ def describe_realtime_session():
             ("conversation.item.truncate", {"item_id": "i1", "content_index": 0, "audio_end_ms": 750}),
         ]
 
+    async def it_ignores_a_cancel_that_found_no_reply_in_progress():
+        detail = RealtimeError(type="invalid_request_error", code="response_cancel_not_active", message="none")
+        stale = RealtimeErrorEvent(event_id="e", type="error", error=detail)
+        connection = Connection([stale, added("i1"), transcript("Hi"), done("completed")])
+        provider = OpenAI("gpt-realtime-2.1-mini")
+        provider.__dict__["_client"] = SimpleNamespace(realtime=SimpleNamespace(connect=connection.connect))
+
+        @agent(provider=provider)
+        async def assistant(message: str) -> str: ...
+
+        async with assistant.thread().live() as call:
+            events = [e async for e in call.turn()]
+
+        assert events[-1] == AssistantMessage("Hi")
+
     async def it_raises_on_server_errors():
         detail = RealtimeError(type="invalid_request_error", code="unsupported", message="no")
         error = RealtimeErrorEvent(event_id="e", type="error", error=detail)
