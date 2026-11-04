@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 from virtus.message import Message
 
@@ -10,6 +10,8 @@ if TYPE_CHECKING:
     from virtus.provider import Provider
     from virtus.thread import Conversation
     from virtus.tool import Tool
+
+type Modality = Literal["audio", "image"]
 
 
 @dataclass(frozen=True)
@@ -25,6 +27,8 @@ class Request:
     tools: tuple[Tool, ...]
     output: Mapping[str, object] | None
     """JSON schema the final answer must follow; `None` for plain text."""
+    media: tuple[Modality, ...]
+    """What the answer must carry besides text: a spoken clip, an image."""
     iteration: int
     """0 for the first provider call of a run, incremented after each round of tool calls."""
     provider: Provider

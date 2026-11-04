@@ -4,7 +4,7 @@ from dataclasses import dataclass, replace
 from itertools import takewhile
 from types import MethodType
 
-from virtus.message import Event, Message, TextDelta, ToolCallDelta, UserMessage
+from virtus.message import AudioDelta, Event, Message, TextDelta, ToolCallDelta, UserMessage
 from virtus.middleware import Capability, Middleware, Next
 from virtus.request import Request
 from virtus.tool import Tool
@@ -93,7 +93,7 @@ class OnMessage(Capability):
         async def apply(request: Request, next: Next) -> AsyncIterator[Event]:
             async for event in next(request):
                 match event:
-                    case TextDelta() | ToolCallDelta():
+                    case TextDelta() | AudioDelta() | ToolCallDelta():
                         yield event
                     case message:
                         result = await _resolve(self.function(message))

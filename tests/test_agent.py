@@ -8,6 +8,7 @@ from pydantic import BaseModel
 from tests.scripted import Scripted, calls
 from virtus import (
     AssistantMessage,
+    Audio,
     Event,
     Image,
     MemoryJournal,
@@ -132,6 +133,16 @@ def describe_delegation():
 
 
 def describe_images():
+    def it_attaches_audio_arguments_and_names_them_in_the_prompt():
+        clip = Audio(b"RIFF", "audio/wav")
+
+        @agent(provider=Scripted())
+        async def transcribe(recording: Audio, language: str) -> str:
+            """Transcribe {recording} in {language}."""
+            ...
+
+        assert transcribe.input(clip, "pt") == UserMessage("Transcribe [audio] in pt.", audio=(clip,))
+
     def it_attaches_image_arguments_and_names_them_in_the_prompt():
         picture = Image(b"\x89PNG", "image/png")
         provider = Scripted(AssistantMessage("a cat"))

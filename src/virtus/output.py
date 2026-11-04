@@ -5,6 +5,7 @@
 `-> AsyncIterator[Event]`  the raw events middleware sees; a union of event types keeps only those
 `-> AsyncIterator[T]`      the answer is a `list[T]`; each item is emitted as soon as it is complete
 `-> Snapshot[T]`           the answer is a `T`, emitted again with more of it filled in as it grows
+`-> Audio` / `-> Image`    awaitable: the answer spoken, or drawn; the provider is asked for that modality
 """
 
 import re
@@ -19,7 +20,8 @@ from pydantic import BaseModel, TypeAdapter, ValidationError, create_model
 from pydantic_core import from_json
 from typing_extensions import TypeForm
 
-from virtus.message import AssistantMessage, Event, Message, TextDelta, ToolCallDelta
+from virtus.message import AssistantMessage, Audio, AudioDelta, Event, Image, Message, TextDelta, ToolCallDelta
+from virtus.request import Modality
 
 type Snapshot[T] = AsyncIterator[T]
 """Return annotation for a `T` streamed as successive, increasingly complete versions of itself."""
@@ -36,6 +38,11 @@ class Output[R](Protocol):
         """
         ...
 
+    @property
+    def media(self) -> tuple[Modality, ...]:
+        """Modalities requested from the provider besides text; empty for most modes."""
+        ...
+
     def consume(self, events: AsyncIterator[Event]) -> R:
         """What a call to the agent returns, built from the run's events."""
         ...
@@ -50,6 +57,10 @@ def output(template: Callable[..., object]) -> Output[object]:
     hint = get_type_hints(template).get("return", str)
     origin, args = get_origin(hint), get_args(hint)
 
+    if hint is Audio:
+        return Sound()
+    if hint is Image:
+        return Picture()
     if origin is not Snapshot and origin is not AsyncIterator:
         return Value(TypeAdapter(hint), None if hint is str else _schema(hint))
 
@@ -69,6 +80,7 @@ def output(template: Callable[..., object]) -> Output[object]:
 class Value[Out](Output[Awaitable[Out]]):
     adapter: TypeAdapter[Out]
     schema: Mapping[str, object] | None = None
+    media: tuple[Modality, ...] = ()
 
     def consume(self, events: AsyncIterator[Event]) -> Awaitable[Out]:
         return self.final(events)
@@ -81,6 +93,7 @@ class Value[Out](Output[Awaitable[Out]]):
 @dataclass(frozen=True)
 class Text(Output[AsyncIterator[str]]):
     schema: Mapping[str, object] | None = None
+    media: tuple[Modality, ...] = ()
 
     async def consume(self, events: AsyncIterator[Event]) -> AsyncIterator[str]:
         async for event in events:
@@ -95,6 +108,7 @@ class Text(Output[AsyncIterator[str]]):
 class Events(Output[AsyncIterator[Event]]):
     kinds: tuple[type, ...]
     schema: Mapping[str, object] | None = None
+    media: tuple[Modality, ...] = ()
 
     async def consume(self, events: AsyncIterator[Event]) -> AsyncIterator[Event]:
         async for event in events:
@@ -109,6 +123,7 @@ class Events(Output[AsyncIterator[Event]]):
 class Items[T](Output[AsyncIterator[T]]):
     item: TypeAdapter[T]
     schema: Mapping[str, object] | None = None
+    media: tuple[Modality, ...] = ()
 
     async def consume(self, events: AsyncIterator[Event]) -> AsyncIterator[T]:
         """Emit every item but the last of each partial parse, since the last one may still be open."""
@@ -145,6 +160,7 @@ class Snapshots[T](Output[AsyncIterator[T]]):
     strict: TypeAdapter[T]
     partial: TypeAdapter[T]
     schema: Mapping[str, object] | None = None
+    media: tuple[Modality, ...] = ()
 
     async def consume(self, events: AsyncIterator[Event]) -> AsyncIterator[T]:
         previous: T | None = None
@@ -180,17 +196,51 @@ class Snapshots[T](Output[AsyncIterator[T]]):
         return None
 
 
+@dataclass(frozen=True)
+class Sound(Output[Awaitable[Audio]]):
+    schema: Mapping[str, object] | None = None
+    media: tuple[Modality, ...] = ("audio",)
+
+    def consume(self, events: AsyncIterator[Event]) -> Awaitable[Audio]:
+        return self.final(events)
+
+    async def final(self, events: AsyncIterator[Event]) -> Audio:
+        answer = await _final(events)
+        if answer.audio is None:
+            raise RuntimeError(f"the answer was not spoken: {answer!r}")
+        return answer.audio
+
+
+@dataclass(frozen=True)
+class Picture(Output[Awaitable[Image]]):
+    schema: Mapping[str, object] | None = None
+    media: tuple[Modality, ...] = ("image",)
+
+    def consume(self, events: AsyncIterator[Event]) -> Awaitable[Image]:
+        return self.final(events)
+
+    async def final(self, events: AsyncIterator[Event]) -> Image:
+        answer = await _final(events)
+        if not answer.images:
+            raise RuntimeError(f"the answer has no image: {answer!r}")
+        return answer.images[0]
+
+
 async def _answer(events: AsyncIterator[Event]) -> str:
-    """Drain the run and return the content of its final assistant message."""
+    return (await _final(events)).content
+
+
+async def _final(events: AsyncIterator[Event]) -> AssistantMessage:
+    """Drain the run and return its final assistant message."""
     last: Message | None = None
 
     async for event in events:
-        if not isinstance(event, (TextDelta, ToolCallDelta)):
+        if not isinstance(event, (TextDelta, AudioDelta, ToolCallDelta)):
             last = event
 
     match last:
-        case AssistantMessage(content=content, tool_calls=()):
-            return content
+        case AssistantMessage(tool_calls=()):
+            return last
         case _:
             raise RuntimeError(f"the run ended without a final answer, last message: {last!r}")
 
@@ -208,7 +258,7 @@ async def _answers(events: AsyncIterator[Event]) -> AsyncIterator[str | Assistan
             case AssistantMessage(tool_calls=()):
                 yield event
                 return
-            case ToolCallDelta():
+            case AudioDelta() | ToolCallDelta():
                 pass
             case _:
                 text.clear()

@@ -20,6 +20,7 @@ from pydantic import BaseModel
 
 from virtus import (
     AssistantMessage,
+    Audio,
     Event,
     Image,
     TextDelta,
@@ -153,6 +154,20 @@ def describe_streaming():
         assert first_request["system"] == "Be brief."
         assert first_request["output_config"] == {"effort": "low"}
         assert first_request["tools"] == [{"name": "weather", "description": "", "input_schema": weather.schema}]
+
+    async def it_refuses_audio_in_either_direction():
+        clip = Audio(b"RIFF", "audio/wav")
+
+        @agent(provider=Anthropic())
+        async def speak(text: str) -> Audio: ...
+
+        @agent(provider=Anthropic())
+        async def listen(recording: Audio) -> str: ...
+
+        with pytest.raises(TypeError, match="text only"):
+            await speak("hi")
+        with pytest.raises(TypeError, match="audio"):
+            await listen(clip)
 
     async def it_raises_on_refusal():
         provider = Anthropic()

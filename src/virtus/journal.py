@@ -17,7 +17,17 @@ from urllib.parse import quote, unquote
 
 from pydantic import BaseModel, Field, TypeAdapter
 
-from virtus.message import AssistantMessage, Image, MediaType, Message, ToolCall, ToolResult, UserMessage
+from virtus.message import (
+    AssistantMessage,
+    Audio,
+    AudioType,
+    Image,
+    ImageType,
+    Message,
+    ToolCall,
+    ToolResult,
+    UserMessage,
+)
 
 
 @runtime_checkable
@@ -100,7 +110,7 @@ class JsonJournal(Journal):
 
 
 class _Image(BaseModel):
-    media_type: MediaType
+    media_type: ImageType
     data: str
 
     @classmethod
@@ -111,10 +121,23 @@ class _Image(BaseModel):
         return Image(b64decode(self.data), self.media_type)
 
 
+class _Audio(BaseModel):
+    media_type: AudioType
+    data: str
+
+    @classmethod
+    def of(cls, audio: Audio) -> "_Audio":
+        return cls(media_type=audio.media_type, data=b64encode(audio.data).decode())
+
+    def audio(self) -> Audio:
+        return Audio(b64decode(self.data), self.media_type)
+
+
 class _User(BaseModel):
     role: Literal["user"] = "user"
     content: str
     images: list[_Image] = []
+    audio: list[_Audio] = []
 
 
 class _Call(BaseModel):
@@ -127,6 +150,8 @@ class _Assistant(BaseModel):
     role: Literal["assistant"] = "assistant"
     content: str
     tool_calls: list[_Call] = []
+    images: list[_Image] = []
+    audio: _Audio | None = None
 
 
 class _Tool(BaseModel):
@@ -136,6 +161,7 @@ class _Tool(BaseModel):
     content: str
     is_error: bool = False
     images: list[_Image] = []
+    audio: list[_Audio] = []
 
 
 type _Entry = Annotated[_User | _Assistant | _Tool, Field(discriminator="role")]
@@ -151,21 +177,33 @@ _RECORD = TypeAdapter(_Record)
 
 def _entry(message: Message) -> _User | _Assistant | _Tool:
     match message:
-        case UserMessage(content=content, images=images):
-            return _User(content=content, images=[_Image.of(i) for i in images])
-        case AssistantMessage(content=content, tool_calls=calls):
+        case UserMessage(content=content, images=images, audio=audio):
+            return _User(content=content, images=_images(images), audio=_clips(audio))
+        case AssistantMessage(content=content, tool_calls=calls, images=images, audio=audio):
             tool_calls = [_Call(id=c.id, name=c.name, arguments=c.arguments) for c in calls]
-            return _Assistant(content=content, tool_calls=tool_calls)
-        case ToolResult(call_id=call_id, name=name, content=content, is_error=is_error, images=images):
-            encoded = [_Image.of(i) for i in images]
-            return _Tool(call_id=call_id, name=name, content=content, is_error=is_error, images=encoded)
+            spoken = _Audio.of(audio) if audio else None
+            return _Assistant(content=content, tool_calls=tool_calls, images=_images(images), audio=spoken)
+        case ToolResult(call_id=call_id, name=name, content=content, is_error=is_error, images=images, audio=audio):
+            entry = _Tool(call_id=call_id, name=name, content=content, is_error=is_error)
+            return entry.model_copy(update={"images": _images(images), "audio": _clips(audio)})
 
 
 def _message(entry: _User | _Assistant | _Tool) -> Message:
     match entry:
-        case _User(content=content, images=images):
-            return UserMessage(content, tuple(i.image() for i in images))
-        case _Assistant(content=content, tool_calls=calls):
-            return AssistantMessage(content, tuple(ToolCall(c.id, c.name, c.arguments) for c in calls))
-        case _Tool(call_id=call_id, name=name, content=content, is_error=is_error, images=images):
-            return ToolResult(call_id, name, content, is_error, tuple(i.image() for i in images))
+        case _User(content=content, images=images, audio=audio):
+            return UserMessage(content, tuple(i.image() for i in images), tuple(a.audio() for a in audio))
+        case _Assistant(content=content, tool_calls=calls, images=images, audio=audio):
+            tool_calls = tuple(ToolCall(c.id, c.name, c.arguments) for c in calls)
+            spoken = audio.audio() if audio else None
+            return AssistantMessage(content, tool_calls, tuple(i.image() for i in images), spoken)
+        case _Tool(call_id=call_id, name=name, content=content, is_error=is_error, images=images, audio=audio):
+            attached = tuple(i.image() for i in images), tuple(a.audio() for a in audio)
+            return ToolResult(call_id, name, content, is_error, *attached)
+
+
+def _images(images: Sequence[Image]) -> list[_Image]:
+    return [_Image.of(i) for i in images]
+
+
+def _clips(audio: Sequence[Audio]) -> list[_Audio]:
+    return [_Audio.of(a) for a in audio]

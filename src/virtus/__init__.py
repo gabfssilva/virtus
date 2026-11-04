@@ -5,9 +5,13 @@ from virtus.journal import Journal, JsonJournal, MemoryJournal
 from virtus.knowledge import Document, Store, knowledge, memory
 from virtus.message import (
     AssistantMessage,
+    Audio,
+    AudioDelta,
+    AudioType,
     Delta,
     Event,
     Image,
+    ImageType,
     MediaType,
     Message,
     TextDelta,
@@ -26,6 +30,9 @@ from virtus.tool import Tool, tool
 __all__ = [
     "Agent",
     "AssistantMessage",
+    "Audio",
+    "AudioDelta",
+    "AudioType",
     "Capabilities",
     "Capability",
     "Conversation",
@@ -33,6 +40,7 @@ __all__ = [
     "Document",
     "Event",
     "Image",
+    "ImageType",
     "Journal",
     "JsonJournal",
     "MediaType",

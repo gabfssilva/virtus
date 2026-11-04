@@ -8,8 +8,10 @@ from pydantic import BaseModel
 from tests.scripted import Scripted, calls
 from virtus import (
     AssistantMessage,
+    Audio,
     Delta,
     Event,
+    Image,
     Provider,
     Request,
     Snapshot,
@@ -51,6 +53,38 @@ class Chunked(Provider):
 
 def _answer(value: object) -> str:
     return json.dumps({"value": value})
+
+
+def describe_sound():
+    async def it_requests_audio_and_returns_the_clip():
+        clip = Audio(b"RIFF", "audio/wav")
+        provider = Scripted(AssistantMessage("Hello there", audio=clip))
+
+        @agent(provider=provider)
+        async def speak(text: str) -> Audio: ...
+
+        assert await speak("hi") == clip
+        assert provider.requests[0].media == ("audio",)
+        assert provider.requests[0].output is None
+
+    async def it_fails_when_the_answer_was_not_spoken():
+        @agent(provider=Scripted(AssistantMessage("Hello there")))
+        async def speak(text: str) -> Audio: ...
+
+        with pytest.raises(RuntimeError, match="not spoken"):
+            await speak("hi")
+
+
+def describe_picture():
+    async def it_requests_an_image_and_returns_the_first_one():
+        picture = Image(b"\x89PNG", "image/png")
+        provider = Scripted(AssistantMessage("Here you go", images=(picture,)))
+
+        @agent(provider=provider)
+        async def draw(subject: str) -> Image: ...
+
+        assert await draw("a cat") == picture
+        assert provider.requests[0].media == ("image",)
 
 
 def describe_text():

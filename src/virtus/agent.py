@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field, create_model
 
 from virtus.capability import flatten
 from virtus.journal import Journal, MemoryJournal
-from virtus.message import Event, Image, UserMessage
+from virtus.message import Audio, Event, Image, UserMessage, placeholder
 from virtus.middleware import Capability, Middleware, Next
 from virtus.output import Output, output
 from virtus.provider import Provider
@@ -119,15 +119,17 @@ class Agent[**P, R](Capability):
     def input(self, *args: object, **kwargs: object) -> UserMessage:
         """The user message a call with these arguments sends.
 
-        `Image` arguments, alone or in a sequence, are attached to the message; in the prompt
-        they read as `[image]`.
+        `Image` and `Audio` arguments, alone or in a sequence, are attached to the message; in the
+        prompt they read as `[image]` and `[audio]`.
         """
         bound = self._signature.bind(*args, **kwargs)
         bound.apply_defaults()
 
-        images = tuple(image for value in bound.arguments.values() for image in Image.found_in(value))
-        text = {name: "[image]" if Image.found_in(value) else value for name, value in bound.arguments.items()}
-        return UserMessage(self._prompt.format(**text), images)
+        values = list(bound.arguments.values())
+        images = tuple(image for value in values for image in Image.found_in(value))
+        audio = tuple(clip for value in values for clip in Audio.found_in(value))
+        text = {name: placeholder(value) or value for name, value in bound.arguments.items()}
+        return UserMessage(self._prompt.format(**text), images, audio)
 
     def middleware(self) -> tuple[Middleware, ...]:
         parameters = create_model(

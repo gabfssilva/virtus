@@ -8,7 +8,7 @@ from typing import get_type_hints
 from pydantic import BaseModel, create_model
 from pydantic_core import to_json
 
-from virtus.message import Event, Image, ToolCall, ToolResult
+from virtus.message import Audio, Event, Image, ToolCall, ToolResult, placeholder
 from virtus.middleware import Capability, Middleware, Next
 from virtus.request import Request
 
@@ -37,8 +37,8 @@ class Tool(Capability):
     async def execute(self, call: ToolCall) -> ToolResult:
         """Run the tool; any failure becomes an error result so the model can react to it.
 
-        A returned `Image`, alone or in a sequence, is attached to the result and reads as `[image]`
-        in its text.
+        A returned `Image` or `Audio`, alone or in a sequence, is attached to the result and reads as
+        `[image]` or `[audio]` in its text.
         """
         try:
             arguments = dict(self.parameters.model_validate_json(call.arguments or "{}"))
@@ -46,15 +46,15 @@ class Tool(Capability):
         except Exception as error:
             return ToolResult(call.id, call.name, f"{type(error).__name__}: {error}", is_error=True)
 
-        images = Image.found_in(value)
+        images, audio = Image.found_in(value), Audio.found_in(value)
         match value:
             case str():
                 return ToolResult(call.id, call.name, value)
-            case Image():
-                return ToolResult(call.id, call.name, "[image]", images=images)
-            case Sequence() if images:
-                text = to_json(["[image]" if isinstance(v, Image) else v for v in value]).decode()
-                return ToolResult(call.id, call.name, text, images=images)
+            case Image() | Audio():
+                return ToolResult(call.id, call.name, placeholder(value) or "", images=images, audio=audio)
+            case Sequence() if images or audio:
+                text = to_json([placeholder(v) or v for v in value]).decode()
+                return ToolResult(call.id, call.name, text, images=images, audio=audio)
             case _:
                 return ToolResult(call.id, call.name, to_json(value).decode())
 

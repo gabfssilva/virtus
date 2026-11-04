@@ -49,12 +49,17 @@ def compaction(max_tokens: int = 32_000, keep: int = 8) -> Middleware:
 def _transcript(messages: Sequence[Message]) -> str:
     def lines(message: Message) -> list[str]:
         match message:
-            case UserMessage(content=content, images=images):
-                return [f"user: {content}" + (f" [{len(images)} image(s)]" if images else "")]
-            case AssistantMessage(content=content, tool_calls=calls):
-                text = [f"assistant: {content}"] if content else []
+            case UserMessage(content=content, images=images, audio=audio):
+                return [f"user: {content}{_media(images, audio)}"]
+            case AssistantMessage(content=content, tool_calls=calls, images=images, audio=audio):
+                text = [f"assistant: {content}{_media(images, (audio,) if audio else ())}"] if content or images else []
                 return [*text, *(f"assistant called {c.name}({c.arguments})" for c in calls)]
-            case ToolResult(name=name, content=content, images=images):
-                return [f"{name} returned: {content}" + (f" [{len(images)} image(s)]" if images else "")]
+            case ToolResult(name=name, content=content, images=images, audio=audio):
+                return [f"{name} returned: {content}{_media(images, audio)}"]
 
     return "\n".join(line for message in messages for line in lines(message))
+
+
+def _media(images: Sequence[object], audio: Sequence[object]) -> str:
+    notes = [f"{len(images)} image(s)"] * bool(images) + [f"{len(audio)} audio clip(s)"] * bool(audio)
+    return f" [{', '.join(notes)}]" if notes else ""

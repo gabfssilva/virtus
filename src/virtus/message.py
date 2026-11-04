@@ -4,13 +4,15 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
-type MediaType = Literal["image/jpeg", "image/png", "image/gif", "image/webp"]
+type ImageType = Literal["image/jpeg", "image/png", "image/gif", "image/webp"]
+type AudioType = Literal["audio/wav", "audio/mpeg", "audio/flac", "audio/ogg", "audio/aac"]
+type MediaType = ImageType | AudioType
 
 
 @dataclass(frozen=True)
 class Image:
     data: bytes
-    media_type: MediaType
+    media_type: ImageType
 
     @classmethod
     def read(cls, path: str | Path) -> "Image":
@@ -24,17 +26,57 @@ class Image:
     @staticmethod
     def found_in(value: object) -> tuple["Image", ...]:
         """The images a value carries: itself, or the items of a sequence (not a string) that are images."""
-        if isinstance(value, Image):
-            return (value,)
-        if isinstance(value, Sequence) and not isinstance(value, str):
-            return tuple(v for v in value if isinstance(v, Image))
-        return ()
+        return attached(Image, value)
+
+
+@dataclass(frozen=True)
+class Audio:
+    data: bytes
+    media_type: AudioType
+
+    @classmethod
+    def read(cls, path: str | Path) -> "Audio":
+        """Load an audio file, taking the media type from its extension."""
+        extensions: dict[str, AudioType] = {
+            ".wav": "audio/wav",
+            ".mp3": "audio/mpeg",
+            ".flac": "audio/flac",
+            ".ogg": "audio/ogg",
+            ".opus": "audio/ogg",
+            ".aac": "audio/aac",
+        }
+        if media_type := extensions.get(Path(path).suffix.lower()):
+            return cls(Path(path).read_bytes(), media_type)
+        raise ValueError(f"{path}: unsupported audio type")
+
+    @staticmethod
+    def found_in(value: object) -> tuple["Audio", ...]:
+        """The audio clips a value carries: itself, or the items of a sequence (not a string) that are audio."""
+        return attached(Audio, value)
+
+
+def attached[T](kind: type[T], value: object) -> tuple[T, ...]:
+    if isinstance(value, kind):
+        return (value,)
+    if isinstance(value, Sequence) and not isinstance(value, str):
+        return tuple(v for v in value if isinstance(v, kind))
+    return ()
+
+
+def placeholder(value: object) -> str | None:
+    """How a media value reads in text: `[image]` or `[audio]`; `None` for anything else."""
+    if Image.found_in(value):
+        return "[image]"
+    if Audio.found_in(value):
+        return "[audio]"
+    return None
 
 
 @dataclass(frozen=True)
 class UserMessage:
     content: str
     images: tuple[Image, ...] = ()
+    audio: tuple[Audio, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -48,7 +90,10 @@ class ToolCall:
 @dataclass(frozen=True)
 class AssistantMessage:
     content: str = ""
+    """The text, or the transcript when the answer is spoken."""
     tool_calls: tuple[ToolCall, ...] = ()
+    images: tuple[Image, ...] = ()
+    audio: Audio | None = None
 
 
 @dataclass(frozen=True)
@@ -58,6 +103,7 @@ class ToolResult:
     content: str
     is_error: bool = False
     images: tuple[Image, ...] = ()
+    audio: tuple[Audio, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -65,6 +111,13 @@ class TextDelta:
     """A fragment of assistant text, streamed before its complete `AssistantMessage`."""
 
     content: str
+
+
+@dataclass(frozen=True)
+class AudioDelta:
+    """A fragment of the spoken answer, streamed before the `AssistantMessage` carrying the whole clip."""
+
+    data: bytes
 
 
 @dataclass(frozen=True)
@@ -79,6 +132,6 @@ class ToolCallDelta:
     arguments: str
 
 
-type Delta = TextDelta | ToolCallDelta
+type Delta = TextDelta | AudioDelta | ToolCallDelta
 type Message = UserMessage | AssistantMessage | ToolResult
 type Event = Delta | Message

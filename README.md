@@ -179,10 +179,12 @@ async def timing(request: Request, next: Next) -> AsyncIterator[Event]:
 `compaction(max_tokens=32_000, keep=8)` is a middleware that summarizes older messages with the same
 provider once the conversation grows past the limit.
 
-## Images
+## Images and audio
 
-An `Image` parameter is attached to the user message and sent to the model. A tool that returns an
-`Image`, alone or in a list, sends it back the same way.
+An `Image` or `Audio` parameter is attached to the user message and sent to the model. A tool that
+returns one, alone or in a list, sends it back the same way. An agent declared `-> Image` or
+`-> Audio` asks the model to draw or speak its answer; that needs a model with the modality, such as
+`openai/gpt-audio-mini` or Gemini's image models, and is not available on the Anthropic provider.
 
 ```python
 @agent(provider=OpenAI())
@@ -198,12 +200,19 @@ await colour(Image.read("photo.png"))
 def screenshot() -> Image:
     """Capture the screen."""
     return Image.read(capture())
+
+
+@agent(provider=OpenAI("gpt-audio-mini", voice="echo"))
+async def speak(text: str) -> Audio:
+    """Say this out loud: {text}"""
+    ...
 ```
 
 ## Examples
 
 `examples/` has one runnable script per feature, numbered in the order above. Each needs an
-`OPENAI_API_KEY`; `13_providers.py` also needs an `ANTHROPIC_API_KEY`.
+`OPENAI_API_KEY`; `13_providers.py` also needs an `ANTHROPIC_API_KEY`, and `17_audio.py` and
+`18_image_generation.py` reach their models through OpenRouter with an `OPENROUTER_API_KEY`.
 
 ## Development
 

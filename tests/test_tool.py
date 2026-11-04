@@ -5,7 +5,7 @@ import pytest
 from pydantic import Field
 
 from tests.scripted import Scripted, calls
-from virtus import AssistantMessage, Image, ToolCall, ToolResult, agent, tool
+from virtus import AssistantMessage, Audio, Image, ToolCall, ToolResult, agent, tool
 
 
 def describe_tool():
@@ -59,6 +59,25 @@ def describe_tool():
             )
             assert await report.execute(ToolCall("2", "report", "{}")) == ToolResult(
                 "2", "report", '["Sales by month","[image]"]', images=(picture,)
+            )
+
+        async def it_attaches_returned_audio():
+            clip = Audio(b"RIFF", "audio/wav")
+            picture = Image(b"\x89PNG", "image/png")
+
+            @tool
+            def record() -> Audio:
+                return clip
+
+            @tool
+            def both() -> list[Audio | Image | str]:
+                return [clip, picture, "notes"]
+
+            assert await record.execute(ToolCall("1", "record", "{}")) == ToolResult(
+                "1", "record", "[audio]", audio=(clip,)
+            )
+            assert await both.execute(ToolCall("2", "both", "{}")) == ToolResult(
+                "2", "both", '["[audio]","[image]","notes"]', images=(picture,), audio=(clip,)
             )
 
         async def it_reports_failures_as_error_results():

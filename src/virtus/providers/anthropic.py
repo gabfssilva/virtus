@@ -55,6 +55,9 @@ class Anthropic(Provider):
         self._base_url = base_url
 
     async def complete(self, request: Request) -> AsyncIterator[Delta | AssistantMessage]:
+        if request.media:
+            raise TypeError(f"{self!r}: the Messages API answers in text only, not {', '.join(request.media)}")
+
         stream = await self._client.messages.create(
             model=self.model,
             max_tokens=self.max_tokens,
@@ -113,6 +116,8 @@ def _messages(history: Sequence[Message]) -> list[MessageParam]:
 
     def convert(message: Message) -> MessageParam:
         match message:
+            case UserMessage(audio=audio) if audio:
+                raise TypeError("the Messages API does not take audio")
             case UserMessage(content=content, images=()):
                 return {"role": "user", "content": content}
             case UserMessage(content=content, images=images):
@@ -129,6 +134,8 @@ def _messages(history: Sequence[Message]) -> list[MessageParam]:
                 raise AssertionError("tool results are grouped before conversion")
 
     def result(message: ToolResult) -> ContentBlockParam:
+        if message.audio:
+            raise TypeError("the Messages API does not take audio")
         content: str | list[TextBlockParam | ImageBlockParam] = message.content
         if message.images:
             content = [TextBlockParam(type="text", text=message.content), *map(_image, message.images)]

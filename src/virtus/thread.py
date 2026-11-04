@@ -9,7 +9,17 @@ from uuid import uuid4
 from weakref import WeakValueDictionary
 
 from virtus.journal import Journal, MemoryJournal
-from virtus.message import AssistantMessage, Event, Message, TextDelta, ToolCall, ToolCallDelta, ToolResult, UserMessage
+from virtus.message import (
+    AssistantMessage,
+    AudioDelta,
+    Event,
+    Message,
+    TextDelta,
+    ToolCall,
+    ToolCallDelta,
+    ToolResult,
+    UserMessage,
+)
 from virtus.middleware import Capability, Middleware, Next
 from virtus.request import Request
 from virtus.tool import Tool
@@ -168,13 +178,14 @@ class Thread[**P, R](Capability, Conversation):
                 messages=tuple(pending),
                 tools=(),
                 output=agent.output.schema,
+                media=agent.output.media,
                 iteration=iteration,
                 provider=agent.provider,
                 thread=self,
             )
 
             async for event in step(request):
-                if not isinstance(event, (TextDelta, ToolCallDelta)):
+                if not isinstance(event, (TextDelta, AudioDelta, ToolCallDelta)):
                     produced.append(event)
                 yield event
 

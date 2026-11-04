@@ -6,6 +6,7 @@ import pytest
 from tests.scripted import Scripted, calls
 from virtus import (
     AssistantMessage,
+    Audio,
     Delta,
     Image,
     JsonJournal,
@@ -21,12 +22,13 @@ from virtus import (
 )
 
 PICTURE = Image(b"\x89PNG", "image/png")
+CLIP = Audio(b"RIFF", "audio/wav")
 HISTORY = (
-    UserMessage("What is this?", (PICTURE,)),
+    UserMessage("What is this?", (PICTURE,), (CLIP,)),
     AssistantMessage("Checking.", (ToolCall("c1", "zoom", '{"factor": 2}'),)),
-    ToolResult("c1", "zoom", "[image]", images=(PICTURE,)),
+    ToolResult("c1", "zoom", "[image]", images=(PICTURE,), audio=(CLIP,)),
     ToolResult("c2", "time", "boom", is_error=True),
-    AssistantMessage("A red square."),
+    AssistantMessage("A red square.", images=(PICTURE,), audio=CLIP),
 )
 
 
