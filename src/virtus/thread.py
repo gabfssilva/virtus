@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import AsyncIterator, Callable, Sequence
+from collections.abc import AsyncIterator, Sequence
 from contextlib import asynccontextmanager
 from functools import reduce
 from itertools import count
@@ -10,12 +10,11 @@ from uuid import uuid4
 from weakref import WeakValueDictionary
 
 from virtus.journal import Journal, MemoryJournal
+from virtus.live import Live
 from virtus.message import (
     AssistantMessage,
-    Audio,
     AudioDelta,
     Event,
-    Image,
     Message,
     TextDelta,
     ToolCall,
@@ -214,43 +213,6 @@ class Thread[**P, R](Capability, Conversation):
                     continue
                 case _:
                     return
-
-
-class Live:
-    """A spoken conversation on a thread: frames go in with `hear`, each `turn` answers what was heard.
-
-    The caller decides when a turn ends and plays the `AudioDelta`s it gets back. Every turn is a user
-    message carrying the audio heard since the last one, and any image shown, so it lands in the
-    history and the journal like a typed message, and the middleware chain runs on it as on any step.
-    """
-
-    def __init__(self, session: Session, run: Callable[[UserMessage], AsyncIterator[Event]]) -> None:
-        self._session = session
-        self._run = run
-        self._heard: list[bytes] = []
-        self._shown: list[Image] = []
-
-    async def hear(self, pcm: bytes) -> None:
-        """Send a frame of the user's speech: 24 kHz, 16-bit, mono PCM."""
-        self._heard.append(pcm)
-        await self._session.hear(pcm)
-
-    async def show(self, image: Image) -> None:
-        self._shown.append(image)
-        await self._session.show(image)
-
-    async def turn(self) -> AsyncIterator[Event]:
-        """End the user's turn and stream the reply: deltas, tool results and the assistant messages."""
-        message = UserMessage("[audio]", tuple(self._shown), (Audio.pcm16(b"".join(self._heard)),))
-        self._heard.clear()
-        self._shown.clear()
-        await self._session.commit()
-        async for event in self._run(message):
-            yield event
-
-    async def interrupt(self, heard_ms: int) -> None:
-        """Stop the reply in progress; `heard_ms` is how much of it the user heard before talking over it."""
-        await self._session.interrupt(heard_ms)
 
 
 _locks: WeakValueDictionary[tuple[int, tuple[str, ...]], asyncio.Lock] = WeakValueDictionary()

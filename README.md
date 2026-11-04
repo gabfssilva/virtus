@@ -210,11 +210,11 @@ async def speak(text: str) -> Audio:
 
 ## Voice
 
-With a realtime model, a thread can be talked to. The caller streams the user's speech as 24 kHz
-16-bit mono PCM, decides when the turn ends and plays the audio that comes back; each turn runs the
-same middleware and tools as a typed message and lands in the history the same way. Needs the
-`realtime` extra (`uv add "virtus[realtime]"`); works against OpenAI's `gpt-realtime` models and
-oMLX's `/v1/realtime`.
+With a realtime model, a thread can be talked to. The caller owns the microphone and the speaker:
+it streams the user's speech as 24 kHz 16-bit mono PCM and plays the audio that comes back. Each
+turn runs the same middleware and tools as a typed message and lands in the history the same way.
+Needs the `realtime` extra (`uv add "virtus[realtime]"`); works against OpenAI's `gpt-realtime`
+models and oMLX's `/v1/realtime`.
 
 ```python
 @agent(provider=OpenAI("gpt-realtime-2.1-mini"), capabilities=[clock])
@@ -222,11 +222,16 @@ async def assistant(message: str) -> str: ...
 
 
 async with assistant.thread("user-42").live() as call:
-    await call.hear(frame)                    # as the microphone produces them
-    async for event in call.turn():           # AudioDelta, TextDelta (transcript), ToolResult, AssistantMessage
-        ...
-    await call.interrupt(heard_ms=1_200)      # the user talked over the reply
+    async for event in call.converse(microphone()):   # AsyncIterator[bytes] of PCM frames
+        match event:
+            case AudioDelta(data=pcm): speaker.write(pcm)
+            case Interrupted(): speaker.abort()         # the user talked over the reply
+            case TextDelta(content=text): ...           # the transcript
 ```
+
+`converse` starts a turn when it detects speech, ends it after 800 ms of quiet and interrupts a reply
+the user talks over; `speech=` swaps the level-based detector for your own. Underneath are
+`call.hear(frame)`, `call.turn()` and `call.interrupt(heard_ms)`, for callers that decide the turns.
 
 ## Examples
 
