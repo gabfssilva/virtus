@@ -54,6 +54,10 @@ class RealtimeSession(Session):
         self._reply: str | None = None
         """Id of the assistant item being spoken, the only one the server lets us truncate."""
 
+    async def open(self) -> None:
+        """Turn server speech detection off before any audio arrives; OpenAI's sessions start with it on."""
+        await self._configure("", ())
+
     async def hear(self, pcm: bytes) -> None:
         await self._connection.input_audio_buffer.append(audio=b64encode(pcm).decode())
 
@@ -68,10 +72,7 @@ class RealtimeSession(Session):
         await self._connection.input_audio_buffer.commit()
 
     async def respond(self, system: str, tools: Sequence[Tool]) -> AsyncIterator[Delta | AssistantMessage]:
-        session = self._session(system, tools)
-        if session != self._configured:
-            await self._connection.session.update(session=session)
-            self._configured = session
+        await self._configure(system, tools)
         await self._connection.response.create()
 
         transcript: list[str] = []
@@ -113,6 +114,12 @@ class RealtimeSession(Session):
         if self._reply:
             item = self._connection.conversation.item
             await item.truncate(item_id=self._reply, content_index=0, audio_end_ms=heard_ms)
+
+    async def _configure(self, system: str, tools: Sequence[Tool]) -> None:
+        session = self._session(system, tools)
+        if session != self._configured:
+            await self._connection.session.update(session=session)
+            self._configured = session
 
     def _session(self, system: str, tools: Sequence[Tool]) -> RealtimeSessionCreateRequestParam:
         output = RealtimeAudioConfigOutputParam(format=PCM)

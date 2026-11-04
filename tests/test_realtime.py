@@ -26,6 +26,27 @@ PCM = {"type": "audio/pcm", "rate": 24000}
 
 
 def describe_realtime_session():
+    async def it_turns_server_speech_detection_off_before_any_audio():
+        connection = Connection()
+        provider = OpenAI("gpt-realtime-2.1-mini")
+        provider.__dict__["_client"] = SimpleNamespace(realtime=SimpleNamespace(connect=connection.connect))
+
+        @agent(provider=provider)
+        async def assistant(message: str) -> str: ...
+
+        async with assistant.thread().live():
+            pass
+
+        [(kind, arguments)] = connection.sent
+        assert kind == "session.update"
+        assert arguments["session"] == {
+            "type": "realtime",
+            "instructions": "",
+            "output_modalities": ["audio"],
+            "tools": [],
+            "audio": {"input": {"format": PCM, "turn_detection": None}, "output": {"format": PCM}},
+        }
+
     async def it_configures_the_session_once_and_streams_the_spoken_reply():
         @tool
         def clock() -> str:
@@ -56,6 +77,7 @@ def describe_realtime_session():
 
         assert connection.models == ["gpt-realtime-2.1-mini"]
         assert [name for name, _ in connection.sent] == [
+            "session.update",
             "input_audio_buffer.append",
             "input_audio_buffer.commit",
             "session.update",
@@ -63,8 +85,8 @@ def describe_realtime_session():
             "input_audio_buffer.commit",
             "response.create",
         ]
-        assert connection.sent[0][1] == {"audio": "AAA="}
-        assert connection.sent[2][1] == {
+        assert connection.sent[1][1] == {"audio": "AAA="}
+        assert connection.sent[3][1] == {
             "session": {
                 "type": "realtime",
                 "instructions": "Be brief.",
@@ -125,7 +147,7 @@ def describe_realtime_session():
             [e async for e in call.turn()]
             await call.interrupt(750)
 
-        assert connection.sent[0] == (
+        assert connection.sent[1] == (
             "conversation.item.create",
             {
                 "item": {

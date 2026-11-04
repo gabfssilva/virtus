@@ -127,7 +127,9 @@ class OpenAI(Provider, LiveProvider):
         from virtus.providers.openai_realtime import RealtimeSession
 
         async with self._client.realtime.connect(model=self.model) as connection:
-            yield RealtimeSession(connection, self.voice)
+            session = RealtimeSession(connection, self.voice)
+            await session.open()
+            yield session
 
     @cached_property
     def _client(self) -> AsyncOpenAI:
