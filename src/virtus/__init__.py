@@ -1,6 +1,7 @@
 from virtus.agent import Agent, agent
 from virtus.capability import Capabilities, context, on_input, on_message
 from virtus.compaction import compaction
+from virtus.journal import Journal, JsonJournal
 from virtus.knowledge import Document, Store, knowledge, memory
 from virtus.message import (
     AssistantMessage,
@@ -32,6 +33,8 @@ __all__ = [
     "Document",
     "Event",
     "Image",
+    "Journal",
+    "JsonJournal",
     "MediaType",
     "Message",
     "Middleware",

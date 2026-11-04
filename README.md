@@ -111,6 +111,17 @@ thread.history                            # the messages as the provider saw the
 thread.dispose()                          # forget it
 ```
 
+With a journal, threads outlive the process. `thread(id)` loads from it, every completed step is
+written back, and `resume()` finishes a run that was interrupted (or repeats the last answer).
+
+```python
+@agent(provider=OpenAI(), journal=JsonJournal("./threads"))
+async def assistant(message: str) -> str: ...
+
+thread = assistant.thread("user-42")      # same history as last time
+await thread.resume()                     # pick up where the crash left it
+```
+
 ## Delegation
 
 An agent in another agent's capabilities becomes a tool. The calling model may name a thread to

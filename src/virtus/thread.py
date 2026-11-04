@@ -8,6 +8,7 @@ from types import MappingProxyType
 from typing import TYPE_CHECKING, Final, Protocol, runtime_checkable
 from uuid import uuid4
 
+from virtus.journal import Journal
 from virtus.message import AssistantMessage, Event, Message, TextDelta, ToolCall, ToolCallDelta, ToolResult, UserMessage
 from virtus.middleware import Capability, Middleware, Next
 from virtus.request import Request
@@ -24,6 +25,11 @@ class Conversation(Protocol):
     id: str
 
     @property
+    def path(self) -> tuple[str, ...]:
+        """`(id,)` for a root thread; delegation appends (agent name, thread name) to the parent's path."""
+        ...
+
+    @property
     def history(self) -> tuple[Message, ...]: ...
 
     @property
@@ -37,8 +43,8 @@ class Conversation(Protocol):
         """Run one turn from an already formatted user message and return the complete answer."""
         ...
 
-    def child(self, key: tuple[str, str], create: Callable[[Callable[[], object]], Conversation]) -> Conversation:
-        """Return the child under `key`, or register the one `create` builds from a detach callback."""
+    def child(self, key: tuple[str, str], agent: Agent[..., object]) -> Conversation:
+        """Return the child under `key`, or open one with `agent` and register it."""
         ...
 
 
@@ -50,17 +56,33 @@ class Thread[**P, R](Capability, Conversation):
     each completed step: a turn rejected by a middleware leaves it unchanged. Calls on the same thread
     run one at a time.
 
+    With a `journal`, the history is loaded from it on creation and written back after every step, so
+    the thread survives the process; see `resume`. Threads opened from this one by delegation share it.
+
     Used as a capability, every delegation from any caller goes to this one thread.
     """
 
-    def __init__(self, agent: Agent[P, R], id: str | None = None, detach: Callable[[], object] = lambda: None):
+    def __init__(
+        self,
+        agent: Agent[P, R],
+        path: tuple[str, ...] | None = None,
+        detach: Callable[[], object] = lambda: None,
+        *,
+        journal: Journal | None = None,
+    ):
         self.agent: Final[Agent[P, R]] = agent
-        self.id = id or uuid4().hex
-        self._history: list[Message] = []
+        self.id = "/".join(path or (uuid4().hex,))
+        self._path = path or (self.id,)
+        self._journal = journal
+        self._history: list[Message] = list(journal.read(self._path) or ()) if journal else []
         self._children: dict[tuple[str, str], Conversation] = {}
         self._detach = detach
         self._disposed = False
         self._lock = asyncio.Lock()
+
+    @property
+    def path(self) -> tuple[str, ...]:
+        return self._path
 
     @property
     def history(self) -> tuple[Message, ...]:
@@ -73,6 +95,14 @@ class Thread[**P, R](Capability, Conversation):
     def __call__(self, *args: P.args, **kwargs: P.kwargs) -> R:
         return self.agent.output.consume(self._stream(self.agent.input(*args, **kwargs)))
 
+    def resume(self) -> R:
+        """Finish a run that was interrupted, or return the last answer again if none was.
+
+        A history ending in tool results continues from the next provider call; one ending in an
+        answer replays that answer without calling anything. An empty thread has nothing to resume.
+        """
+        return self.agent.output.consume(self._stream(None))
+
     def dispose(self) -> None:
         """Forget the conversation and the threads opened from it, and unregister it from its agent.
 
@@ -81,6 +111,8 @@ class Thread[**P, R](Capability, Conversation):
         for child in list(self._children.values()):
             child.dispose()
         self._history.clear()
+        if self._journal:
+            self._journal.delete(self.path)
         self._disposed = True
         self._detach()
 
@@ -93,15 +125,15 @@ class Thread[**P, R](Capability, Conversation):
     async def send(self, message: UserMessage) -> object:
         return await self.agent.output.final(self._stream(message))
 
-    def child(self, key: tuple[str, str], create: Callable[[Callable[[], object]], Conversation]) -> Conversation:
+    def child(self, key: tuple[str, str], agent: Agent[..., object]) -> Conversation:
         if found := self._children.get(key):
             return found
 
-        created = create(lambda: self._children.pop(key, None))
+        created = Thread(agent, (*self.path, *key), lambda: self._children.pop(key, None), journal=self._journal)
         self._children[key] = created
         return created
 
-    async def _stream(self, message: UserMessage) -> AsyncIterator[Event]:
+    async def _stream(self, message: UserMessage | None) -> AsyncIterator[Event]:
         if self._disposed:
             raise RuntimeError(f"{self.agent.name}: thread {self.id!r} was disposed")
 
@@ -109,11 +141,23 @@ class Thread[**P, R](Capability, Conversation):
             async for event in self._run(message):
                 yield event
 
-    async def _run(self, message: UserMessage) -> AsyncIterator[Event]:
-        """Repeat steps until one ends without tool calls, updating the history after each step."""
+    async def _run(self, message: UserMessage | None) -> AsyncIterator[Event]:
+        """Repeat steps until one ends without tool calls, updating the history after each step.
+
+        Without a message, the run resumes from the history: nothing is called if it already ends in
+        an answer, which is replayed instead.
+        """
         agent = self.agent
         sent: list[Request] = []
-        pending = [*self._history, message]
+        pending = [*self._history, message] if message else [*self._history]
+
+        match pending:
+            case []:
+                raise RuntimeError(f"{agent.name}: thread {self.id!r} has nothing to resume")
+            case [*_, AssistantMessage(content=content, tool_calls=()) as answer] if message is None:
+                yield TextDelta(content)
+                yield answer
+                return
 
         async def terminal(request: Request) -> AsyncIterator[Event]:
             async def execute(call: ToolCall) -> ToolResult:
@@ -164,6 +208,8 @@ class Thread[**P, R](Capability, Conversation):
 
             pending = [*(sent[-1].messages if sent else pending), *produced]
             self._history[:] = pending
+            if self._journal:
+                self._journal.write(self.path, pending)
 
             match produced:
                 case [*_, ToolResult()]:

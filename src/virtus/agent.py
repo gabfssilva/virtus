@@ -7,12 +7,13 @@ from uuid import uuid4
 from pydantic import BaseModel, Field, create_model
 
 from virtus.capability import flatten
+from virtus.journal import Journal
 from virtus.message import Event, Image, UserMessage
 from virtus.middleware import Capability, Middleware, Next
 from virtus.output import Output, output
 from virtus.provider import Provider
 from virtus.request import Request
-from virtus.thread import Conversation, Thread
+from virtus.thread import Thread
 from virtus.tool import Tool, parameters_model
 
 
@@ -40,6 +41,7 @@ class Agent[**P, R](Capability):
         description: str | None = None,
         system: str = "",
         capabilities: Sequence[Capability | Middleware] = (),
+        journal: Journal | None = None,
     ) -> None:
         signature = inspect.signature(template)
 
@@ -47,6 +49,8 @@ class Agent[**P, R](Capability):
         self.description = description or inspect.getdoc(template) or ""
         self.provider = provider
         self.system = system
+        self.journal = journal
+        """Where `thread(id)` keeps conversations across processes; one-off calls are never written."""
         self.output: Final[Output[R]] = output
         self.chain: tuple[Middleware, ...] = flatten(capabilities)
         """Middleware applied around each step of a run, outermost first."""
@@ -64,7 +68,10 @@ class Agent[**P, R](Capability):
         return Thread(self)(*args, **kwargs)
 
     def thread(self, id: str | None = None) -> Thread[P, R]:
-        """Return the thread with this id, creating it if needed; without an id, create a new one."""
+        """Return the thread with this id, from memory or the journal, creating it if needed.
+
+        Without an id, create a new one.
+        """
         key = id or uuid4().hex
         if found := self._threads.get(key):
             return found
@@ -72,7 +79,7 @@ class Agent[**P, R](Capability):
         def detach() -> None:
             self._threads = {k: t for k, t in self._threads.items() if k != key}
 
-        created = Thread(self, key, detach)
+        created = Thread(self, (key,), detach, journal=self.journal)
         self._threads = {**self._threads, key: created}
         return created
 
@@ -109,10 +116,7 @@ class Agent[**P, R](Capability):
             parent = request.thread
 
             async def run(thread: str | None = None, **arguments: object) -> object:
-                def create(detach: Callable[[], object]) -> Conversation:
-                    return Thread(self, f"{parent.id}/{self.name}/{thread}", detach)
-
-                target = parent.child((self.name, thread), create) if thread else Thread(self)
+                target = parent.child((self.name, thread), self) if thread else Thread(self)
                 return await target.send(self.input(**arguments))
 
             names = [name for agent, name in parent.children if agent == self.name]
@@ -133,9 +137,10 @@ def agent(
     description: str | None = None,
     system: str = "",
     capabilities: Sequence[Capability | Middleware] = (),
+    journal: Journal | None = None,
 ) -> "Decorator":
     """Turn an async template function into an `Agent`; see `virtus.output` for the return types."""
-    return Decorator(provider, name, description, system, capabilities)
+    return Decorator(provider, name, description, system, capabilities, journal)
 
 
 @dataclass(frozen=True)
@@ -145,6 +150,7 @@ class Decorator:
     description: str | None
     system: str
     capabilities: Sequence[Capability | Middleware]
+    journal: Journal | None
 
     @overload
     def __call__[**P, T](self, template: Callable[P, Awaitable[AsyncIterator[T]]]) -> Agent[P, AsyncIterator[T]]: ...
@@ -159,4 +165,5 @@ class Decorator:
             description=self.description,
             system=self.system,
             capabilities=self.capabilities,
+            journal=self.journal,
         )
