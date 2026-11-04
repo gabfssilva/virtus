@@ -54,7 +54,7 @@ def _transcript(messages: Sequence[Message]) -> str:
             case AssistantMessage(content=content, tool_calls=calls):
                 text = [f"assistant: {content}"] if content else []
                 return [*text, *(f"assistant called {c.name}({c.arguments})" for c in calls)]
-            case ToolResult(name=name, content=content):
-                return [f"{name} returned: {content}"]
+            case ToolResult(name=name, content=content, images=images):
+                return [f"{name} returned: {content}" + (f" [{len(images)} image(s)]" if images else "")]
 
     return "\n".join(line for message in messages for line in lines(message))

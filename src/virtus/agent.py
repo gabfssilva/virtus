@@ -85,15 +85,8 @@ class Agent[**P, R](Capability):
         bound = self._signature.bind(*args, **kwargs)
         bound.apply_defaults()
 
-        def images_in(value: object) -> tuple[Image, ...]:
-            if isinstance(value, Image):
-                return (value,)
-            if isinstance(value, Sequence) and not isinstance(value, str):
-                return tuple(v for v in value if isinstance(v, Image))
-            return ()
-
-        images = tuple(image for value in bound.arguments.values() for image in images_in(value))
-        text = {name: "[image]" if images_in(value) else value for name, value in bound.arguments.items()}
+        images = tuple(image for value in bound.arguments.values() for image in Image.found_in(value))
+        text = {name: "[image]" if Image.found_in(value) else value for name, value in bound.arguments.items()}
         return UserMessage(self._prompt.format(**text), images)
 
     def filters(self) -> tuple[Filter, ...]:

@@ -64,6 +64,26 @@ def describe_messages():
             }
         ]
 
+    def it_sends_tool_result_images_in_a_user_message_after_the_results():
+        picture = Image(b"\x89PNG", "image/png")
+        history = (
+            AssistantMessage(tool_calls=(ToolCall("c1", "snapshot", "{}"), ToolCall("c2", "time", "{}"))),
+            ToolResult("c1", "snapshot", "[image]", images=(picture,)),
+            ToolResult("c2", "time", "noon"),
+        )
+
+        assert _messages("", history)[1:] == [
+            {"role": "tool", "tool_call_id": "c1", "content": "[image]"},
+            {"role": "tool", "tool_call_id": "c2", "content": "noon"},
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "Images returned by the tool calls above."},
+                    {"type": "image_url", "image_url": {"url": "data:image/png;base64,iVBORw=="}},
+                ],
+            },
+        ]
+
 
 class Forecast(BaseModel):
     city: str

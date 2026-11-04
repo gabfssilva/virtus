@@ -129,8 +129,11 @@ def _messages(history: Sequence[Message]) -> list[MessageParam]:
                 raise AssertionError("tool results are grouped before conversion")
 
     def result(message: ToolResult) -> ContentBlockParam:
+        content: str | list[TextBlockParam | ImageBlockParam] = message.content
+        if message.images:
+            content = [TextBlockParam(type="text", text=message.content), *map(_image, message.images)]
         return ToolResultBlockParam(
-            type="tool_result", tool_use_id=message.call_id, content=message.content, is_error=message.is_error
+            type="tool_result", tool_use_id=message.call_id, content=content, is_error=message.is_error
         )
 
     def grouped() -> Iterator[MessageParam]:

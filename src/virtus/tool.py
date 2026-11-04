@@ -1,6 +1,6 @@
 import asyncio
 import inspect
-from collections.abc import AsyncIterator, Callable, Mapping
+from collections.abc import AsyncIterator, Callable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from types import MethodType
 from typing import get_type_hints
@@ -9,7 +9,7 @@ from pydantic import BaseModel, create_model
 from pydantic_core import to_json
 
 from virtus.filter import Capability, Filter, Next
-from virtus.message import Event, ToolCall, ToolResult
+from virtus.message import Event, Image, ToolCall, ToolResult
 from virtus.request import Request
 
 
@@ -35,14 +35,28 @@ class Tool(Capability):
         return self.parameters.model_json_schema()
 
     async def execute(self, call: ToolCall) -> ToolResult:
-        """Run the tool; any failure becomes an error result so the model can react to it."""
+        """Run the tool; any failure becomes an error result so the model can react to it.
+
+        A returned `Image`, alone or in a sequence, is attached to the result and reads as `[image]`
+        in its text.
+        """
         try:
             arguments = dict(self.parameters.model_validate_json(call.arguments or "{}"))
             value = await invoke(self.function, arguments)
         except Exception as error:
             return ToolResult(call.id, call.name, f"{type(error).__name__}: {error}", is_error=True)
 
-        return ToolResult(call.id, call.name, value if isinstance(value, str) else to_json(value).decode())
+        images = Image.found_in(value)
+        match value:
+            case str():
+                return ToolResult(call.id, call.name, value)
+            case Image():
+                return ToolResult(call.id, call.name, "[image]", images=images)
+            case Sequence() if images:
+                text = to_json(["[image]" if isinstance(v, Image) else v for v in value]).decode()
+                return ToolResult(call.id, call.name, text, images=images)
+            case _:
+                return ToolResult(call.id, call.name, to_json(value).decode())
 
 
 def tool(function: Callable[..., object], *, name: str | None = None, description: str | None = None) -> Tool:

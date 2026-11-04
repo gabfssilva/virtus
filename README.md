@@ -166,7 +166,8 @@ provider once the conversation grows past the limit.
 
 ## Images
 
-An `Image` parameter is attached to the user message and sent to the model.
+An `Image` parameter is attached to the user message and sent to the model. A tool that returns an
+`Image`, alone or in a list, sends it back the same way.
 
 ```python
 @agent(provider=OpenAI())
@@ -176,6 +177,12 @@ async def colour(picture: Image) -> str:
 
 
 await colour(Image.read("photo.png"))
+
+
+@tool
+def screenshot() -> Image:
+    """Capture the screen."""
+    return Image.read(capture())
 ```
 
 ## Examples

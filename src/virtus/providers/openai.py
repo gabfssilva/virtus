@@ -1,6 +1,7 @@
 from base64 import b64encode
-from collections.abc import AsyncIterator, Mapping, Sequence
+from collections.abc import AsyncIterator, Iterator, Mapping, Sequence
 from functools import cached_property
+from itertools import groupby
 
 from openai import AsyncOpenAI, omit
 from openai.types.chat import (
@@ -98,6 +99,8 @@ class OpenAI(Provider):
 
 
 def _messages(system: str, history: Sequence[Message]) -> list[ChatCompletionMessageParam]:
+    """A `tool` message carries text only, so images returned by a run of tool calls follow it as a user message."""
+
     def convert(message: Message) -> ChatCompletionMessageParam:
         match message:
             case UserMessage(content=content, images=()):
@@ -121,8 +124,17 @@ def _messages(system: str, history: Sequence[Message]) -> list[ChatCompletionMes
             case ToolResult(call_id=call_id, content=content):
                 return ChatCompletionToolMessageParam(role="tool", tool_call_id=call_id, content=content)
 
+    def grouped() -> Iterator[ChatCompletionMessageParam]:
+        for are_results, group in groupby(history, key=lambda m: isinstance(m, ToolResult)):
+            messages = list(group)
+            yield from map(convert, messages)
+            images = [i for m in messages if isinstance(m, ToolResult) for i in m.images]
+            if are_results and images:
+                note = ChatCompletionContentPartTextParam(type="text", text="Images returned by the tool calls above.")
+                yield ChatCompletionUserMessageParam(role="user", content=[note, *map(_image, images)])
+
     prompt = [ChatCompletionSystemMessageParam(role="system", content=system)] if system else []
-    return [*prompt, *map(convert, history)]
+    return [*prompt, *grouped()]
 
 
 def _image(image: Image) -> ChatCompletionContentPartImageParam:

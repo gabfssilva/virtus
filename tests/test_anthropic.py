@@ -77,6 +77,29 @@ def describe_messages():
             }
         ]
 
+    def it_sends_tool_result_images_as_blocks_inside_the_result():
+        history = (ToolResult("c1", "snapshot", "[image]", images=(Image(b"\x89PNG", "image/png"),)),)
+
+        assert _messages(history) == [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": "c1",
+                        "is_error": False,
+                        "content": [
+                            {"type": "text", "text": "[image]"},
+                            {
+                                "type": "image",
+                                "source": {"type": "base64", "media_type": "image/png", "data": "iVBORw=="},
+                            },
+                        ],
+                    }
+                ],
+            }
+        ]
+
 
 def describe_streaming():
     async def it_emits_deltas_and_the_assembled_message():
