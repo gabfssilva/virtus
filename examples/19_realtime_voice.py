@@ -1,20 +1,22 @@
-"""A spoken conversation over the Realtime API: frames in, the reply streamed back, tools in between.
+"""Talk to an agent: Enter to start speaking, Enter again to send; the reply plays back. Tools work mid-call.
 
-The question is synthesized with OpenAI's text-to-speech so the example needs no microphone. Needs the
-`realtime` extra and a realtime model on the key; `OPENAI_BASE_URL` points it at a local server such as oMLX.
+Needs the `realtime` extra, `sounddevice` for the microphone and speaker, and a realtime model:
+`gpt-realtime-2.1-mini` by default, or another as the first argument (`OPENAI_BASE_URL` points at oMLX).
 """
 
 import asyncio
-import tempfile
+import sys
+import threading
+from collections.abc import Buffer
 from datetime import datetime
-from pathlib import Path
 
-from openai import AsyncOpenAI
+import sounddevice
 
-from virtus import AssistantMessage, AudioDelta, TextDelta, ToolResult, agent, tool
+from virtus import AudioDelta, Live, TextDelta, ToolResult, agent, tool
 from virtus.providers import OpenAI
 
-FRAME = 24_000 * 2 // 10  # 100 ms of 24 kHz 16-bit mono PCM
+RATE = 24_000
+FRAME = RATE // 10  # samples in 100 ms
 
 
 @tool
@@ -23,33 +25,51 @@ def clock() -> str:
     return datetime.now().strftime("%H:%M")
 
 
-@agent(provider=OpenAI("gpt-realtime-2.1-mini"), system="Answer in one short sentence.", capabilities=[clock])
+@agent(
+    provider=OpenAI(sys.argv[1] if len(sys.argv) > 1 else "gpt-realtime-2.1-mini"),
+    system="You are talking out loud. Answer in one or two short sentences.",
+    capabilities=[clock],
+)
 async def assistant(message: str) -> str: ...
 
 
 async def main() -> None:
-    speech = await AsyncOpenAI().audio.speech.create(
-        model="tts-1-hd-1106", voice="alloy", input="Hi! What time is it right now?", response_format="pcm"
+    loop = asyncio.get_running_loop()
+    frames: asyncio.Queue[bytes] = asyncio.Queue()
+    talking = threading.Event()
+
+    def captured(indata: Buffer, count: int, time: object, status: sounddevice.CallbackFlags) -> None:
+        if talking.is_set():
+            loop.call_soon_threadsafe(frames.put_nowait, bytes(indata))
+
+    async def forward(call: Live) -> None:
+        while pcm := await frames.get():
+            await call.hear(pcm)
+
+    microphone = sounddevice.RawInputStream(
+        samplerate=RATE, channels=1, dtype="int16", blocksize=FRAME, callback=captured
     )
-    question = await speech.aread()
+    speaker = sounddevice.RawOutputStream(samplerate=RATE, channels=1, dtype="int16")
 
-    async with assistant.thread().live() as call:
-        for start in range(0, len(question), FRAME):
-            await call.hear(question[start : start + FRAME])
+    with microphone, speaker:
+        async with assistant.thread().live() as call:
+            while await asyncio.to_thread(input, "\nEnter to talk, q to quit: ") != "q":
+                talking.set()
+                pump = asyncio.create_task(forward(call))
+                await asyncio.to_thread(input, "... speak, then Enter to send ")
+                talking.clear()
+                frames.put_nowait(b"")
+                await pump
 
-        heard: list[bytes] = []
-        async for event in call.turn():
-            match event:
-                case TextDelta(content=text):
-                    print(text, end="", flush=True)
-                case AudioDelta(data=pcm):
-                    heard.append(pcm)
-                case ToolResult(name=name, content=content):
-                    print(f"\n[{name} -> {content}]")
-                case AssistantMessage(audio=audio) if audio:
-                    path = Path(tempfile.gettempdir()) / "virtus_live.wav"
-                    path.write_bytes(audio.data)
-                    print(f"\n{len(heard)} audio frames, {len(audio.data)} bytes written to {path}")
+                async for event in call.turn():
+                    match event:
+                        case TextDelta(content=text):
+                            print(text, end="", flush=True)
+                        case AudioDelta(data=pcm):
+                            await asyncio.to_thread(speaker.write, pcm)
+                        case ToolResult(name=name, content=content):
+                            print(f"\n[{name} -> {content}]")
+                print()
 
 
 asyncio.run(main())

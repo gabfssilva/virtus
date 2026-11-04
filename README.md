@@ -233,7 +233,8 @@ async with assistant.thread("user-42").live() as call:
 `examples/` has one runnable script per feature, numbered in the order above. Each needs an
 `OPENAI_API_KEY`; `13_providers.py` also needs an `ANTHROPIC_API_KEY`, `17_audio.py` and
 `18_image_generation.py` reach their models through OpenRouter with an `OPENROUTER_API_KEY`, and
-`19_realtime_voice.py` needs the `realtime` extra and a realtime model.
+`19_realtime_voice.py` needs the `realtime` extra, `sounddevice` (in the dev group) for the microphone and
+speaker, and a realtime model.
 
 ## Development
 

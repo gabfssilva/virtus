@@ -27,6 +27,7 @@ dev = [
     "pytest-asyncio>=0.24",
     "pytest-describe>=2.2",
     "ruff>=0.8",
+    "sounddevice>=0.5.6",
 ]
 
 [tool.pytest.ini_options]
