@@ -96,7 +96,7 @@ class Anthropic(Provider):
         if self.effort is not None:
             config["effort"] = self.effort
         if schema is not None:
-            config["format"] = {"type": "json_schema", "schema": {"additionalProperties": False, **schema}}
+            config["format"] = {"type": "json_schema", "schema": dict(schema)}
         return config
 
     @cached_property

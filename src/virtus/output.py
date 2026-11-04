@@ -233,7 +233,23 @@ def _partial_value(text: str) -> object | None:
 
 
 def _schema(annotation: TypeForm[object]) -> Mapping[str, object]:
-    return create_model("output", value=(annotation, ...)).model_json_schema()
+    return _closed(create_model("output", value=(annotation, ...)).model_json_schema())
+
+
+def _closed(schema: Mapping[str, object]) -> dict[str, object]:
+    """Every object gets `additionalProperties: false`; strict decoders such as OpenAI's reject open ones."""
+
+    def walk(value: object) -> object:
+        match value:
+            case Mapping():
+                return _closed(value)
+            case list():
+                return [walk(item) for item in value]
+            case _:
+                return value
+
+    closed = {key: walk(value) for key, value in schema.items()}
+    return {**closed, "additionalProperties": False} if closed.get("type") == "object" else closed
 
 
 def _partial(annotation: TypeForm[object]) -> TypeForm[object]:

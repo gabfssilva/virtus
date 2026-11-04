@@ -97,6 +97,7 @@ def describe_items():
             "required": ["value"],
             "title": "output",
             "type": "object",
+            "additionalProperties": False,
             "$defs": {
                 "Person": {
                     "properties": {
@@ -106,6 +107,7 @@ def describe_items():
                     "required": ["name", "age"],
                     "title": "Person",
                     "type": "object",
+                    "additionalProperties": False,
                 }
             },
         }
@@ -189,6 +191,19 @@ def describe_snapshot():
         schema = provider.requests[0].output
         assert schema is not None
         assert schema["properties"] == {"value": {"$ref": "#/$defs/Person"}}
+
+    async def it_closes_every_object_for_strict_decoders():
+        provider = Scripted(AssistantMessage(_answer({"title": "Bees", "authors": []})))
+
+        @agent(provider=provider)
+        async def summarize(topic: str) -> Snapshot[Paper]: ...
+
+        [s async for s in summarize("x")]
+
+        schema = provider.requests[0].output
+        assert schema is not None
+        assert schema["additionalProperties"] is False
+        assert json.dumps(schema).count('"additionalProperties": false') == 3  # output, Paper, Person
 
     async def it_accumulates_text_for_str():
         @agent(provider=Scripted(AssistantMessage("one two")))
