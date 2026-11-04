@@ -2,7 +2,6 @@
 
 import asyncio
 import tempfile
-from pathlib import Path
 
 from virtus import JsonJournal, agent
 from virtus.providers import OpenAI
@@ -14,7 +13,7 @@ async def assistant(message: str) -> str: ...
 
 async def main() -> None:
     with tempfile.TemporaryDirectory() as folder:
-        journal = JsonJournal(Path(folder) / "threads")
+        journal = JsonJournal(folder)
 
         first = assistant.replace(journal=journal).thread("user-42")
         print(await first("My name is Ana and I live in Lisbon."))
