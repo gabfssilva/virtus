@@ -5,7 +5,7 @@ Anthropic needs the extra: `uv add "virtus[anthropic]"` and an `ANTHROPIC_API_KE
 
 import asyncio
 
-from virtus import Provider, agent, tool
+from virtus import agent, tool
 from virtus.providers import Anthropic, OpenAI
 
 
@@ -15,18 +15,15 @@ def exchange_rate(currency: str) -> float:
     return {"USD": 0.92, "GBP": 1.17, "BRL": 0.16}.get(currency.upper(), 1.0)
 
 
-def converter(provider: Provider):
-    @agent(provider=provider, capabilities=[exchange_rate])
-    async def convert(amount: float, currency: str) -> str:
-        """How many euros are {amount} {currency}? Answer in one sentence."""
-        ...
-
-    return convert
+@agent(provider=OpenAI(), capabilities=[exchange_rate])
+async def convert(amount: float, currency: str) -> str:
+    """How many euros are {amount} {currency}? Answer in one sentence."""
+    ...
 
 
 async def main() -> None:
-    for provider in (OpenAI(), Anthropic(effort="low")):
-        print(f"{provider!r}: {await converter(provider)(100, 'BRL')}")
+    for converter in (convert, convert.replace(provider=Anthropic(effort="low"))):
+        print(f"{converter.provider!r}: {await converter(100, 'BRL')}")
 
 
 asyncio.run(main())

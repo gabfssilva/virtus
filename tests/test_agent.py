@@ -140,3 +140,39 @@ def describe_images():
         assert Image.read(file) == Image(b"\x89PNG", "image/png")
         with pytest.raises(ValueError, match="unsupported image type"):
             Image.read(tmp_path / "notes.txt")
+
+
+def describe_replace():
+    class Pet(BaseModel):
+        name: str
+
+    async def it_copies_the_agent_with_some_settings_changed():
+        first = Scripted(AssistantMessage('{"value": {"name": "Rex"}}'))
+        second = Scripted(AssistantMessage('{"value": {"name": "Max"}}'))
+
+        @tool
+        def bark() -> str:
+            return "woof"
+
+        @agent(provider=first, system="Be brief.")
+        async def pet(kind: str) -> Pet:
+            """Name a {kind}."""
+            ...
+
+        other = pet.replace(provider=second, capabilities=[bark])
+
+        assert await pet("dog") == Pet(name="Rex")
+        assert await other("dog") == Pet(name="Max")
+        assert first.requests[0].system == "Be brief."
+        assert second.requests[0].system == "Be brief."
+        assert [t.name for t in second.requests[0].tools] == ["bark"]
+        assert pet.chain == ()
+
+    def it_keeps_threads_apart():
+        @agent(provider=Scripted())
+        async def chat(message: str) -> str: ...
+
+        other = chat.replace(system="Be brief.")
+
+        assert chat.thread("u1") is not other.thread("u1")
+        assert other.thread("u1").agent is other

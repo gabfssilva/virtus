@@ -8,22 +8,19 @@ from virtus import JsonJournal, agent
 from virtus.providers import OpenAI
 
 
-def assistant_with(journal: JsonJournal):
-    @agent(provider=OpenAI(), system="Answer in one short sentence.", journal=journal)
-    async def assistant(message: str) -> str: ...
-
-    return assistant
+@agent(provider=OpenAI(), system="Answer in one short sentence.")
+async def assistant(message: str) -> str: ...
 
 
 async def main() -> None:
     with tempfile.TemporaryDirectory() as folder:
         journal = JsonJournal(Path(folder) / "threads")
 
-        first = assistant_with(journal).thread("user-42")
+        first = assistant.replace(journal=journal).thread("user-42")
         print(await first("My name is Ana and I live in Lisbon."))
 
         # A second agent instance stands in for a new process: same journal, same thread id.
-        second = assistant_with(journal).thread("user-42")
+        second = assistant.replace(journal=journal).thread("user-42")
         print(f"\nloaded {len(second.history)} messages from disk")
         print(await second("Where do I live?"))
         print(await second.resume())  # nothing pending: the last answer, without a call

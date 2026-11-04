@@ -17,6 +17,13 @@ from virtus.thread import Thread
 from virtus.tool import Tool, parameters_model
 
 
+class Unset:
+    """Marks a `replace` setting to keep; `None` is a real value for some of them."""
+
+
+UNSET: Final = Unset()
+
+
 class Agent[**P, R](Capability):
     """An LLM call loop described by a template function.
 
@@ -52,9 +59,11 @@ class Agent[**P, R](Capability):
         self.journal = journal
         """Where `thread(id)` keeps conversations across processes; one-off calls are never written."""
         self.output: Final[Output[R]] = output
+        self.capabilities: Final[tuple[Capability | Middleware, ...]] = tuple(capabilities)
         self.chain: tuple[Middleware, ...] = flatten(capabilities)
         """Middleware applied around each step of a run, outermost first."""
         self.parameters: type[BaseModel] = parameters_model(template)
+        self._template = template
         self._signature = signature
         self._prompt = inspect.getdoc(template) or "\n\n".join(f"{{{p}}}" for p in signature.parameters)
         self._threads: Mapping[str, Thread[P, R]] = {}
@@ -66,6 +75,35 @@ class Agent[**P, R](Capability):
 
     def __call__(self, *args: P.args, **kwargs: P.kwargs) -> R:
         return Thread(self)(*args, **kwargs)
+
+    def replace(
+        self,
+        *,
+        provider: Provider | Unset = UNSET,
+        name: str | Unset = UNSET,
+        description: str | Unset = UNSET,
+        system: str | Unset = UNSET,
+        capabilities: Sequence[Capability | Middleware] | Unset = UNSET,
+        journal: Journal | Unset | None = UNSET,
+    ) -> "Agent[P, R]":
+        """A copy with these settings changed; same template and output mode, its own threads.
+
+        `capabilities` replaces the whole list: extend with `agent.replace(capabilities=[*agent.capabilities, more])`.
+        """
+
+        def pick[T](value: T | Unset, current: T) -> T:
+            return current if isinstance(value, Unset) else value
+
+        return Agent(
+            self._template,
+            output=self.output,
+            provider=pick(provider, self.provider),
+            name=pick(name, self.name),
+            description=pick(description, self.description),
+            system=pick(system, self.system),
+            capabilities=pick(capabilities, self.capabilities),
+            journal=pick(journal, self.journal),
+        )
 
     def thread(self, id: str | None = None) -> Thread[P, R]:
         """Return the thread with this id, from memory or the journal, creating it if needed.
