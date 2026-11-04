@@ -176,3 +176,23 @@ def describe_replace():
 
         assert chat.thread("u1") is not other.thread("u1")
         assert other.thread("u1").agent is other
+
+    async def it_extends_the_capabilities_in_order():
+        provider = Scripted(AssistantMessage("ok"))
+
+        @tool
+        def first() -> str:
+            return "1"
+
+        @tool
+        def second() -> str:
+            return "2"
+
+        @agent(provider=Scripted(), capabilities=[first])
+        async def chat(message: str) -> str: ...
+
+        other = chat.extend(second).replace(provider=provider)
+
+        assert await other("hi") == "ok"
+        assert [t.name for t in provider.requests[0].tools] == ["first", "second"]
+        assert chat.capabilities == (first,)

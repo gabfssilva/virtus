@@ -88,7 +88,7 @@ class Agent[**P, R](Capability):
     ) -> "Agent[P, R]":
         """A copy with these settings changed; same template and output mode, its own threads.
 
-        `capabilities` replaces the whole list: extend with `agent.replace(capabilities=[*agent.capabilities, more])`.
+        `capabilities` replaces the whole list; `extend` appends to it.
         """
 
         def pick[T](value: T | Unset, current: T) -> T:
@@ -104,6 +104,10 @@ class Agent[**P, R](Capability):
             capabilities=pick(capabilities, self.capabilities),
             journal=pick(journal, self.journal),
         )
+
+    def extend(self, *capabilities: Capability | Middleware) -> "Agent[P, R]":
+        """A copy with these capabilities appended after the current ones."""
+        return self.replace(capabilities=(*self.capabilities, *capabilities))
 
     def thread(self, id: str | None = None) -> Thread[P, R]:
         """Return the thread with this id, from memory or the journal, creating it if needed.

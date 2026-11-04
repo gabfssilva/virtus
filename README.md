@@ -36,7 +36,7 @@ asyncio.run(main())
 `OpenAI()` reads `OPENAI_API_KEY`; `base_url=` points it at OpenRouter, DeepSeek, Ollama or any
 compatible server. `Anthropic()` reads `ANTHROPIC_API_KEY`.
 `agent.replace(provider=..., system=..., capabilities=..., journal=...)` is a copy of an agent with
-those settings changed.
+those settings changed; `agent.extend(tool, ...)` is a copy with more capabilities.
 
 ## What a call returns
 
