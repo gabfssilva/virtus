@@ -1,4 +1,6 @@
+import io
 import mimetypes
+import wave
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -48,6 +50,17 @@ class Audio:
         if media_type := extensions.get(Path(path).suffix.lower()):
             return cls(Path(path).read_bytes(), media_type)
         raise ValueError(f"{path}: unsupported audio type")
+
+    @classmethod
+    def pcm16(cls, data: bytes, rate: int = 24_000) -> "Audio":
+        """Raw 16-bit mono PCM as a WAV clip, the form speech models stream in and out."""
+        buffer = io.BytesIO()
+        with wave.open(buffer, "wb") as file:
+            file.setnchannels(1)
+            file.setsampwidth(2)
+            file.setframerate(rate)
+            file.writeframes(data)
+        return cls(buffer.getvalue(), "audio/wav")
 
     @staticmethod
     def found_in(value: object) -> tuple["Audio", ...]:

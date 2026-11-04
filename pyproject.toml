@@ -12,6 +12,9 @@ dependencies = [
 anthropic = [
     "anthropic>=2.3.0",
 ]
+realtime = [
+    "openai[realtime]",
+]
 
 [build-system]
 requires = ["hatchling"]

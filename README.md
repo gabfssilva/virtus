@@ -208,11 +208,32 @@ async def speak(text: str) -> Audio:
     ...
 ```
 
+## Voice
+
+With a realtime model, a thread can be talked to. The caller streams the user's speech as 24 kHz
+16-bit mono PCM, decides when the turn ends and plays the audio that comes back; each turn runs the
+same middleware and tools as a typed message and lands in the history the same way. Needs the
+`realtime` extra (`uv add "virtus[realtime]"`); works against OpenAI's `gpt-realtime` models and
+oMLX's `/v1/realtime`.
+
+```python
+@agent(provider=OpenAI("gpt-realtime-2.1-mini"), capabilities=[clock])
+async def assistant(message: str) -> str: ...
+
+
+async with assistant.thread("user-42").live() as call:
+    await call.hear(frame)                    # as the microphone produces them
+    async for event in call.turn():           # AudioDelta, TextDelta (transcript), ToolResult, AssistantMessage
+        ...
+    await call.interrupt(heard_ms=1_200)      # the user talked over the reply
+```
+
 ## Examples
 
 `examples/` has one runnable script per feature, numbered in the order above. Each needs an
-`OPENAI_API_KEY`; `13_providers.py` also needs an `ANTHROPIC_API_KEY`, and `17_audio.py` and
-`18_image_generation.py` reach their models through OpenRouter with an `OPENROUTER_API_KEY`.
+`OPENAI_API_KEY`; `13_providers.py` also needs an `ANTHROPIC_API_KEY`, `17_audio.py` and
+`18_image_generation.py` reach their models through OpenRouter with an `OPENROUTER_API_KEY`, and
+`19_realtime_voice.py` needs the `realtime` extra and a realtime model.
 
 ## Development
 

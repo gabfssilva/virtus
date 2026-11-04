@@ -1,7 +1,6 @@
-import io
-import wave
 from base64 import b64decode, b64encode
 from collections.abc import AsyncIterator, Iterator, Mapping, Sequence
+from contextlib import asynccontextmanager
 from functools import cached_property
 from itertools import groupby
 from typing import Literal
@@ -40,17 +39,18 @@ from virtus.message import (
     ToolResult,
     UserMessage,
 )
-from virtus.provider import Provider
+from virtus.provider import LiveProvider, Provider, Session
 from virtus.request import Request
 from virtus.tool import Tool
 
 
-class OpenAI(Provider):
-    """Chat Completions API; `base_url` also covers compatible servers (OpenRouter, DeepSeek, Ollama).
+class OpenAI(Provider, LiveProvider):
+    """Chat Completions API; `base_url` also covers compatible servers (OpenRouter, DeepSeek, Ollama, oMLX).
 
     Options left `None` are not sent, so the server's defaults apply. `reasoning_effort` only
     applies to reasoning models. `voice` speaks when the agent's answer is `Audio`, which only audio
     models accept; audio in the input needs one too. Spoken answers come back as 24 kHz mono WAV.
+    With a realtime model, `connect` opens the Realtime API for `Thread.live`.
     """
 
     def __init__(
@@ -62,7 +62,7 @@ class OpenAI(Provider):
         temperature: float | None = None,
         max_tokens: int | None = None,
         reasoning_effort: ReasoningEffort = None,
-        voice: str = "alloy",
+        voice: str | None = None,
     ) -> None:
         self.model = model
         self.temperature = temperature
@@ -83,7 +83,7 @@ class OpenAI(Provider):
             max_completion_tokens=omit if self.max_tokens is None else self.max_tokens,
             reasoning_effort=omit if self.reasoning_effort is None else self.reasoning_effort,
             # Streamed audio is only offered as raw PCM; it is wrapped as WAV below.
-            audio=ChatCompletionAudioParam(voice=self.voice, format="pcm16") if wants_audio else omit,
+            audio=ChatCompletionAudioParam(voice=self.voice or "alloy", format="pcm16") if wants_audio else omit,
             # The SDK's `modalities` does not admit `image`, which OpenRouter and Gemini-style servers take.
             extra_body={"modalities": ["text", *request.media]} if request.media else None,
             stream=True,
@@ -118,8 +118,16 @@ class OpenAI(Provider):
             "".join(text),
             tuple(_tool_call(f) for _, f in sorted(fragments.items())),
             tuple(images),
-            Audio(_wav(b"".join(sound)), "audio/wav") if sound else None,
+            Audio.pcm16(b"".join(sound)) if sound else None,
         )
+
+    @asynccontextmanager
+    async def connect(self) -> AsyncIterator[Session]:
+        """A Realtime API session on `model`, which must be a realtime model; needs the `realtime` extra."""
+        from virtus.providers.openai_realtime import RealtimeSession
+
+        async with self._client.realtime.connect(model=self.model) as connection:
+            yield RealtimeSession(connection, self.voice)
 
     @cached_property
     def _client(self) -> AsyncOpenAI:
@@ -193,17 +201,6 @@ def _audio(audio: Audio) -> ChatCompletionContentPartInputAudioParam:
         case other:
             raise TypeError(f"Chat Completions takes audio input as wav or mp3, not {other}")
     return {"type": "input_audio", "input_audio": {"data": b64encode(audio.data).decode(), "format": format}}
-
-
-def _wav(pcm: bytes) -> bytes:
-    """The model's pcm16 stream is 24 kHz, 16-bit, mono; a WAV header makes it a file and a valid input."""
-    buffer = io.BytesIO()
-    with wave.open(buffer, "wb") as file:
-        file.setnchannels(1)
-        file.setsampwidth(2)
-        file.setframerate(24_000)
-        file.writeframes(pcm)
-    return buffer.getvalue()
 
 
 class _ImageUrl(BaseModel):

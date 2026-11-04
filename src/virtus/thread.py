@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import AsyncIterator, Sequence
+from collections.abc import AsyncIterator, Callable, Sequence
+from contextlib import asynccontextmanager
 from functools import reduce
 from itertools import count
 from typing import TYPE_CHECKING, Final, Protocol, runtime_checkable
@@ -11,8 +12,10 @@ from weakref import WeakValueDictionary
 from virtus.journal import Journal, MemoryJournal
 from virtus.message import (
     AssistantMessage,
+    Audio,
     AudioDelta,
     Event,
+    Image,
     Message,
     TextDelta,
     ToolCall,
@@ -21,6 +24,7 @@ from virtus.message import (
     UserMessage,
 )
 from virtus.middleware import Capability, Middleware, Next
+from virtus.provider import LiveProvider, Session
 from virtus.request import Request
 from virtus.tool import Tool
 
@@ -106,6 +110,15 @@ class Thread[**P, R](Capability, Conversation):
         """Delete the conversation and the threads opened from it from the journal."""
         self._journal.delete(self._path)
 
+    @asynccontextmanager
+    async def live(self) -> AsyncIterator[Live]:
+        """Talk to this thread over the provider's realtime connection; see `Live`."""
+        provider = self.agent.provider
+        if not isinstance(provider, LiveProvider):
+            raise TypeError(f"{provider!r} has no realtime connection")
+        async with provider.connect() as session:
+            yield Live(session, lambda message: self._stream(message, session))
+
     def middleware(self) -> tuple[Middleware, ...]:
         async def run(**arguments: object) -> object:
             return await self.send(self.agent.input(**arguments))
@@ -118,16 +131,17 @@ class Thread[**P, R](Capability, Conversation):
     def child(self, key: tuple[str, str], agent: Agent[..., object]) -> Conversation:
         return Thread(agent, (*self._path, *key), self._journal)
 
-    async def _stream(self, message: UserMessage | None) -> AsyncIterator[Event]:
+    async def _stream(self, message: UserMessage | None, live: Session | None = None) -> AsyncIterator[Event]:
         async with self._lock:
-            async for event in self._run(message):
+            async for event in self._run(message, live):
                 yield event
 
-    async def _run(self, message: UserMessage | None) -> AsyncIterator[Event]:
+    async def _run(self, message: UserMessage | None, live: Session | None) -> AsyncIterator[Event]:
         """Repeat steps until one ends without tool calls, updating the history after each step.
 
         Without a message, the run resumes from the history: nothing is called if it already ends in
-        an answer, which is replayed instead.
+        an answer, which is replayed instead. With a live session, it answers instead of the provider
+        and gets the tool results back.
         """
         agent = self.agent
         sent: list[Request] = []
@@ -149,8 +163,9 @@ class Thread[**P, R](Capability, Conversation):
 
             sent.append(request)
             reply: AssistantMessage | None = None
+            events = live.respond(request.system, request.tools) if live else request.provider.complete(request)
 
-            async for event in request.provider.complete(request):
+            async for event in events:
                 if isinstance(event, AssistantMessage):
                     reply = event
                 yield event
@@ -162,6 +177,8 @@ class Thread[**P, R](Capability, Conversation):
                 tasks = [group.create_task(execute(call)) for call in reply.tool_calls]
 
             for task in tasks:
+                if live:
+                    await live.deliver(task.result())
                 yield task.result()
 
         def link(inner: Next, outer: Middleware) -> Next:
@@ -178,7 +195,7 @@ class Thread[**P, R](Capability, Conversation):
                 messages=tuple(pending),
                 tools=(),
                 output=agent.output.schema,
-                media=agent.output.media,
+                media=("audio",) if live else agent.output.media,
                 iteration=iteration,
                 provider=agent.provider,
                 thread=self,
@@ -197,6 +214,43 @@ class Thread[**P, R](Capability, Conversation):
                     continue
                 case _:
                     return
+
+
+class Live:
+    """A spoken conversation on a thread: frames go in with `hear`, each `turn` answers what was heard.
+
+    The caller decides when a turn ends and plays the `AudioDelta`s it gets back. Every turn is a user
+    message carrying the audio heard since the last one, and any image shown, so it lands in the
+    history and the journal like a typed message, and the middleware chain runs on it as on any step.
+    """
+
+    def __init__(self, session: Session, run: Callable[[UserMessage], AsyncIterator[Event]]) -> None:
+        self._session = session
+        self._run = run
+        self._heard: list[bytes] = []
+        self._shown: list[Image] = []
+
+    async def hear(self, pcm: bytes) -> None:
+        """Send a frame of the user's speech: 24 kHz, 16-bit, mono PCM."""
+        self._heard.append(pcm)
+        await self._session.hear(pcm)
+
+    async def show(self, image: Image) -> None:
+        self._shown.append(image)
+        await self._session.show(image)
+
+    async def turn(self) -> AsyncIterator[Event]:
+        """End the user's turn and stream the reply: deltas, tool results and the assistant messages."""
+        message = UserMessage("[audio]", tuple(self._shown), (Audio.pcm16(b"".join(self._heard)),))
+        self._heard.clear()
+        self._shown.clear()
+        await self._session.commit()
+        async for event in self._run(message):
+            yield event
+
+    async def interrupt(self, heard_ms: int) -> None:
+        """Stop the reply in progress; `heard_ms` is how much of it the user heard before talking over it."""
+        await self._session.interrupt(heard_ms)
 
 
 _locks: WeakValueDictionary[tuple[int, tuple[str, ...]], asyncio.Lock] = WeakValueDictionary()

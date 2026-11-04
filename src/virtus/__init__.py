@@ -22,9 +22,9 @@ from virtus.message import (
 )
 from virtus.middleware import Capability, Middleware, Next
 from virtus.output import Snapshot
-from virtus.provider import Provider
+from virtus.provider import LiveProvider, Provider, Session
 from virtus.request import Request
-from virtus.thread import Conversation, Thread
+from virtus.thread import Conversation, Live, Thread
 from virtus.tool import Tool, tool
 
 __all__ = [
@@ -43,6 +43,8 @@ __all__ = [
     "ImageType",
     "Journal",
     "JsonJournal",
+    "Live",
+    "LiveProvider",
     "MediaType",
     "MemoryJournal",
     "Message",
@@ -50,6 +52,7 @@ __all__ = [
     "Next",
     "Provider",
     "Request",
+    "Session",
     "Snapshot",
     "Store",
     "TextDelta",
