@@ -102,6 +102,9 @@ class Todo(Capabilities):
         return f"added {task!r}"
 ```
 
+`virtus.tools` has ready-made tools. `websearch` searches the web through `ddgs`, a metasearch
+over Bing, Google, DuckDuckGo and others; no key, installed by the `websearch` extra.
+
 ## Threads
 
 A thread is a conversation kept across calls. Its history lives in the agent's journal, in memory by
@@ -240,7 +243,7 @@ the user talks over; `speech=` swaps the level-based detector for your own. Unde
 `OPENAI_API_KEY`; `13_providers.py` also needs an `ANTHROPIC_API_KEY`, `17_audio.py` and
 `18_image_generation.py` reach their models through OpenRouter with an `OPENROUTER_API_KEY`, and
 `19_realtime_voice.py` needs the `realtime` extra, `sounddevice` (in the dev group) for the microphone and
-speaker, and a realtime model.
+speaker, and a realtime model. `20_websearch.py` needs the `websearch` extra.
 
 ## Development
 

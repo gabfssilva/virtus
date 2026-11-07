@@ -15,6 +15,9 @@ anthropic = [
 realtime = [
     "openai[realtime]",
 ]
+websearch = [
+    "ddgs>=9.16",
+]
 
 [build-system]
 requires = ["hatchling"]
