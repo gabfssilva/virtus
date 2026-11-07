@@ -34,7 +34,7 @@ def observe(out: TextIO | None = None, *, color: bool | None = None) -> Middlewa
     runs: dict[str, _Run] = {}
 
     async def observe(request: Request, next: Next) -> AsyncIterator[Event]:
-        key = request.thread.id
+        key = "/".join(request.thread.path)
         if request.iteration == 0 or key not in runs:
             runs[key] = _Run(console, request)
         run = runs[key]
@@ -95,7 +95,7 @@ class _Run:
         self.tools_started = self.started
         asked = request.messages[-1] if request.messages else None
         prompt = f" · {_clip(asked.content)}" if isinstance(asked, UserMessage) else ""
-        console.line(f"▶ {request.thread.id}{console.dim(prompt)}")
+        console.line(f"▶ {'/'.join(request.thread.path)}{console.dim(prompt)}")
 
     def step(self, request: Request) -> None:
         self.step_started = perf_counter()

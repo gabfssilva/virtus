@@ -38,10 +38,11 @@ class Conversation(Protocol):
     """What middleware and parent threads see of a thread, independent of its agent's types."""
 
     id: str
+    """The thread's name within its agent: what `agent.thread(id)` takes. `path` is the unique key."""
 
     @property
     def path(self) -> tuple[str, ...]:
-        """`(id,)` for a root thread; delegation appends (agent name, thread name) to the parent's path."""
+        """`(agent name, id)` for a root thread; delegation appends (agent name, thread name) to the parent's path."""
         ...
 
     @property
@@ -71,16 +72,16 @@ class Thread[**P, R](Capability, Conversation):
     redaction or compaction, plus the replies, so those rewrites carry over to later turns; a turn rejected
     by a middleware leaves it unchanged. Handles to the same conversation in one process run one at a time.
 
-    Without a journal of its own the thread gets a private `MemoryJournal`, which is what one-off calls
-    use: nothing of theirs reaches the agent's journal.
+    Without a journal of its own the thread gets a private `MemoryJournal`, which is what a direct one-off
+    call of an agent uses: nothing of its reaches the agent's journal.
 
     Used as a capability, every message dispatched to its agent, from any caller, lands in this one thread.
     """
 
     def __init__(self, agent: Agent[P, R], path: tuple[str, ...] | None = None, journal: Journal | None = None):
         self.agent: Final[Agent[P, R]] = agent
-        self._path = path or (uuid4().hex,)
-        self.id = "/".join(self._path)
+        self._path = path or (agent.name, uuid4().hex)
+        self.id = self._path[-1]
         self._journal = journal or MemoryJournal()
         self._lock = _lock(self._journal, self._path)
 

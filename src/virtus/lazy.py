@@ -21,10 +21,10 @@ def lazy(*capabilities: Capability | Middleware) -> Middleware:
     that goes in `capabilities=` goes here: tools, `Capabilities` classes, `workspace(...)`, MCP servers.
     """
     chain = flatten(capabilities)
-    loaded: dict[str, set[str]] = {}
+    loaded: dict[tuple[str, ...], set[str]] = {}
 
     async def lazily(request: Request, next: Next) -> AsyncIterator[Event]:
-        wanted = loaded.setdefault(request.thread.id, set())
+        wanted = loaded.setdefault(request.thread.path, set())
         outer = request.tools
 
         async def offer(inner: Request) -> AsyncIterator[Event]:

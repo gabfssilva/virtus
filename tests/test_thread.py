@@ -259,7 +259,8 @@ def describe_dispatch():
 
         assert research.requests[1].messages == (UserMessage("Research wasps"),)
         assert lead.thread("ana").children == (("researcher", "x"),)
-        assert lead.thread("ana").child(("researcher", "x"), researcher).id == "ana/researcher/x"
+        child = lead.thread("ana").child(("researcher", "x"), researcher)
+        assert (child.id, child.path) == ("x", ("lead", "ana", "researcher", "x"))
 
     async def it_lists_the_agents_and_their_open_conversations_in_the_system_prompt():
         lead_provider = Scripted(_dispatch({"topic": "bees"}, "researcher:insects"), _done())

@@ -9,6 +9,7 @@ direct call would; the targets and their open conversations are listed in the sy
 from __future__ import annotations
 
 import asyncio
+import re
 from collections.abc import AsyncIterator, Callable, Mapping
 from dataclasses import dataclass, replace
 from functools import reduce
@@ -103,7 +104,7 @@ def dispatching(target: Target) -> Middleware:
         tools = (*(t for t in request.tools if t is not found), tool)
 
         name = target.agent.name
-        open = [thread for agent, thread in parent.children if agent == name]
+        open = [thread for agent, thread in parent.children if agent == name and not ONE_OFF.fullmatch(thread)]
         line = f"- {name}: {target.agent.description}" + (f" Open conversations: {', '.join(open)}" if open else "")
         if found:
             system = f"{request.system}\n{line}"
@@ -125,6 +126,9 @@ def _media(annotation: object) -> bool:
 
 
 HEADER = "Agents you can `dispatch` to:"
+
+ONE_OFF = re.compile(r"[0-9a-f]{32}")
+"""The generated name of a one-off request's thread, kept in the caller's journal but not offered to the model."""
 
 DESCRIPTION = (
     "Send a request to one or more agents and get their replies, keyed by address. An address is an agent "

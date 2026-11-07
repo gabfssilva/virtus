@@ -35,8 +35,8 @@ class Agent[**P, R](Capability):
     Used as a capability, the agent becomes a target of the caller's `dispatch` tool (`virtus.dispatch`):
     the calling model addresses it by name for a one-off request, or as `name:thread` to keep a
     conversation going, and passes the template's arguments, which format the message exactly as a
-    direct call does. Those threads belong to the caller's thread, so separate conversations never
-    share them.
+    direct call does. Those threads, one-off requests included, live under the caller's thread in its
+    journal, so separate conversations never share them.
     """
 
     def __init__(
@@ -58,7 +58,7 @@ class Agent[**P, R](Capability):
         self.provider = provider
         self.system = system
         self.journal: Journal = journal or MemoryJournal()
-        """Where every thread of this agent keeps its history; one-off calls are never written to it."""
+        """Where every thread of this agent keeps its history; direct one-off calls are never written to it."""
         self.output: Final[Output[R]] = output
         self.capabilities: Final[tuple[Capability | Middleware, ...]] = tuple(capabilities)
         self.chain: tuple[Middleware, ...] = flatten(capabilities)
@@ -113,7 +113,7 @@ class Agent[**P, R](Capability):
 
         Without an id, start a new one.
         """
-        return Thread(self, (id or uuid4().hex,), self.journal)
+        return Thread(self, (self.name, id or uuid4().hex), self.journal)
 
     def input(self, *args: object, **kwargs: object) -> UserMessage:
         """The user message a call with these arguments sends.
@@ -132,7 +132,7 @@ class Agent[**P, R](Capability):
 
     def middleware(self) -> tuple[Middleware, ...]:
         def conversation(parent: Conversation, thread: str | None) -> Conversation:
-            return parent.child((self.name, thread), self) if thread else Thread(self)
+            return parent.child((self.name, thread or uuid4().hex), self)
 
         return (dispatching(Target(self, conversation)),)
 

@@ -115,8 +115,8 @@ def describe_persistent_threads():
 
         await chat.thread("u1")("card 1234")
 
-        assert journal.read(("u1",)) == (UserMessage("card ****"), AssistantMessage("noted"))
-        assert "1234" not in (tmp_path / "u1.json").read_text()
+        assert journal.read(("chat", "u1")) == (UserMessage("card ****"), AssistantMessage("noted"))
+        assert "1234" not in (tmp_path / "chat" / "u1.json").read_text()
 
     async def it_does_not_write_one_off_calls(tmp_path: Path):
         journal = JsonJournal(tmp_path)
@@ -131,7 +131,7 @@ def describe_persistent_threads():
 
         thread.dispose()
 
-        assert journal.read(("u1",)) is None
+        assert journal.read(("chat", "u1")) is None
 
     async def it_persists_the_threads_opened_by_delegation(tmp_path: Path):
         journal = JsonJournal(tmp_path)
@@ -147,10 +147,25 @@ def describe_persistent_threads():
             AssistantMessage("bees dance"),
             UserMessage("Research wasps"),
         )
-        assert journal.read(("u1", "researcher", "insects")) == (
+        assert journal.read(("lead", "u1", "researcher", "insects")) == (
             *research.requests[0].messages,
             AssistantMessage("wasps sting"),
         )
+
+    async def it_keeps_one_off_requests_under_the_caller_without_offering_them_again(tmp_path: Path):
+        journal = JsonJournal(tmp_path)
+        provider = _delegating("bees", thread=None)
+        lead = _lead(Scripted(AssistantMessage("bees dance")), provider, journal)
+
+        await lead.thread("u1")("go")
+
+        [(agent, name)] = journal.children(("lead", "u1"))
+        assert (agent, len(name)) == ("researcher", 32)
+        assert journal.read(("lead", "u1", "researcher", name)) == (
+            UserMessage("Research bees"),
+            AssistantMessage("bees dance"),
+        )
+        assert "Open conversations" not in provider.requests[1].system
 
 
 def describe_resume():
@@ -167,7 +182,7 @@ def describe_resume():
         assert thread.history == (UserMessage("answer?"), calls(("lookup", {})), ToolResult("call-0", "lookup", "42"))
         assert await thread.resume() == "It is 42"
         assert provider.requests[0].messages == thread.history[:3]
-        assert journal.read(("u1",)) == thread.history
+        assert journal.read(("chat", "u1")) == thread.history
 
     async def it_replays_the_last_answer_without_calling_the_provider(tmp_path: Path):
         journal = JsonJournal(tmp_path)
@@ -221,8 +236,7 @@ def _lead(research: Provider, provider: Provider, journal: JsonJournal):
     return lead
 
 
-def _delegating(topic: str) -> Scripted:
-    """A lead that sends `topic` to the researcher on the thread named "insects", then finishes."""
-    return Scripted(
-        calls(("dispatch", {"to": ["researcher:insects"], "arguments": {"topic": topic}})), AssistantMessage("done")
-    )
+def _delegating(topic: str, thread: str | None = "insects") -> Scripted:
+    """A lead that sends `topic` to the researcher on the named thread (one-off without one), then finishes."""
+    address = f"researcher:{thread}" if thread else "researcher"
+    return Scripted(calls(("dispatch", {"to": [address], "arguments": {"topic": topic}})), AssistantMessage("done"))

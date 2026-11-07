@@ -161,9 +161,9 @@ thread.history                            # the messages as the provider saw the
 thread.dispose()                          # forget it
 ```
 
-With a `JsonJournal`, threads outlive the process: every completed step is written to disk,
-`thread(id)` reads it back, and `resume()` finishes a run that was interrupted (or repeats the last
-answer).
+With a `JsonJournal`, threads outlive the process: every completed step is written to
+`<directory>/<agent>/<id>.json`, `thread(id)` reads it back, and `resume()` finishes a run that was
+interrupted (or repeats the last answer). Threads opened by delegation are kept under the caller's.
 
 ```python
 @agent(provider=OpenAI(), journal=JsonJournal("./threads"))

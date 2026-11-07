@@ -32,7 +32,7 @@ def describe_observe():
 
         assert await assistant.thread("u1")("What time is it?") == "It is noon."
         assert out.getvalue() == (
-            "▶ u1 · What time is it?\n"
+            "▶ assistant/u1 · What time is it?\n"
             "├─ Scripted · 1 msg · tools: clock\n"
             "│  1.0s\n"
             "│  ⚙ clock()\n"

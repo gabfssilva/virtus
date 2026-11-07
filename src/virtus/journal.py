@@ -33,8 +33,8 @@ from virtus.message import (
 
 @runtime_checkable
 class Journal(Protocol):
-    """`path` is `(id,)` for a root thread; a thread opened by delegation appends the agent name and the
-    conversation name to its parent's path. `delete` removes the thread and every thread under it;
+    """`path` is `(agent name, id)` for a root thread; a thread opened by delegation appends the agent name
+    and the conversation name to its parent's path. `delete` removes the thread and every thread under it;
     `children` lists the (agent name, conversation name) pairs directly under a thread.
     """
 
@@ -70,7 +70,7 @@ class MemoryJournal(Journal):
 
 
 class JsonJournal(Journal):
-    """One JSON file per thread under `directory`; children live in a folder named after their parent."""
+    """One JSON file per thread, `directory/<agent>/<id>.json`; children live in a folder named after their parent."""
 
     def __init__(self, directory: str | Path) -> None:
         self.directory = Path(directory)
