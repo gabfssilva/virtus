@@ -1,11 +1,12 @@
 from typing import TYPE_CHECKING
 
+from virtus.providers.factories import omlx, openrouter
 from virtus.providers.openai import OpenAI
 
 if TYPE_CHECKING:
     from virtus.providers.anthropic import Anthropic
 
-__all__ = ["Anthropic", "OpenAI"]
+__all__ = ["Anthropic", "OpenAI", "omlx", "openrouter"]
 
 
 def __getattr__(name: str) -> object:

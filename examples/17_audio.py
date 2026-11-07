@@ -1,17 +1,16 @@
 """An agent declared `-> Audio` answers out loud; an `Audio` parameter is heard. Needs an audio model.
 
-OpenAI's audio models are reached here through OpenRouter, so this example reads `OPENROUTER_API_KEY`.
+OpenAI's audio models are reached here through OpenRouter; `openrouter()` reads `OPENROUTER_API_KEY`.
 """
 
 import asyncio
-import os
 import tempfile
 from pathlib import Path
 
 from virtus import Audio, agent
-from virtus.providers import OpenAI
+from virtus.providers import openrouter
 
-voice = OpenAI("openai/gpt-audio-mini", api_key=os.environ["OPENROUTER_API_KEY"], base_url="https://openrouter.ai/api/v1")
+voice = openrouter("openai/gpt-audio-mini")
 
 
 @agent(provider=voice, system="Answer in one short sentence.")

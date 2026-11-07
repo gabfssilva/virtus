@@ -55,7 +55,7 @@ class OpenAI(Provider, LiveProvider):
 
     def __init__(
         self,
-        model: str = "gpt-4.1-mini",
+        model: str = "gpt-6-luna",
         *,
         api_key: str | None = None,
         base_url: str | None = None,

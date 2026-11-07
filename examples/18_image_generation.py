@@ -4,16 +4,13 @@ Reached here through OpenRouter, so this example reads `OPENROUTER_API_KEY`.
 """
 
 import asyncio
-import os
 import tempfile
 from pathlib import Path
 
 from virtus import Image, agent
-from virtus.providers import OpenAI
+from virtus.providers import openrouter
 
-painter = OpenAI(
-    "google/gemini-3.1-flash-lite-image", api_key=os.environ["OPENROUTER_API_KEY"], base_url="https://openrouter.ai/api/v1"
-)
+painter = openrouter("google/gemini-3.1-flash-lite-image")
 
 
 @agent(provider=painter)
