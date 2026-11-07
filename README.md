@@ -118,6 +118,14 @@ from virtus.tools import calculator, http, websearch, wikipedia
 async def assistant(question: str) -> str: ...
 ```
 
+`lazy(...)` offers tools on demand. The model sees a one-line catalog and a `load_tools` tool; what it
+loads joins its tools for the rest of the conversation. Anything that goes in `capabilities=` goes in.
+
+```python
+@agent(provider=OpenAI(), capabilities=[lazy(wikipedia, calculator, http, arxiv, openalex, workspace("./project"))])
+async def assistant(question: str) -> str: ...
+```
+
 `secrets(...)` lets the agent use values it never sees. It writes `{{secrets.github}}` where a tool
 argument needs the token; the value goes in just before the tool runs and is redacted out of whatever
 the tool returns. Put it after the tools it guards.
@@ -129,8 +137,9 @@ async def dev(task: str) -> str: ...
 
 `mcp(name=server, ...)` connects to MCP servers for the length of a block and offers their tools under
 `name__*`, with the schemas the servers declare. A string is a command line (stdio) or a URL (streamable
-HTTP); `Stdio(command, env=...)` and `Http(url, headers=...)` carry the server's credentials, which the
-model never sees. Needs the `mcp` extra.
+HTTP); `Stdio(command, env=...)` and `Http(url, headers=..., auth=...)` carry the server's credentials, which
+the model never sees; `auth` takes any `httpx2.Auth`, the SDK's `OAuthClientProvider` included. Needs the
+`mcp` extra.
 
 ```python
 async with mcp(fs="npx -y @modelcontextprotocol/server-filesystem .", docs=Http(url, headers=auth)) as tools:
@@ -325,7 +334,8 @@ the user talks over; `speech=` swaps the level-based detector for your own. Unde
 speaker, and a realtime model. `20_websearch.py` and `21_observe.py` need the `websearch` extra.
 `22_academic_researcher.py` is a four-agent team over arXiv and OpenAlex, both keyless.
 `23_toolbox.py`, `24_workspace.py` and `25_vault.py` show the stdlib tools, the workspace and
-a secret the agent uses without seeing; `26_mcp.py` needs the `mcp` extra and `npx`.
+a secret the agent uses without seeing; `26_mcp.py` needs the `mcp` extra and `npx`; `27_lazy_tools.py`
+loads tools on demand.
 
 ## Development
 
