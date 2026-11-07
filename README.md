@@ -104,8 +104,17 @@ class Todo(Capabilities):
 
 `virtus.tools` has ready-made tools. `websearch` searches the web through `ddgs`, a metasearch
 over Bing, Google, DuckDuckGo and others; no key, installed by the `websearch` extra. The rest
-need no key and no extra: `arxiv` and `openalex` search preprints and the published record and
-answer `Paper`s.
+need no key and no extra: `wikipedia` looks a topic up and answers `Article`s, `arxiv` and
+`openalex` search preprints and the published record and answer `Paper`s, `calculator` evaluates
+arithmetic exactly, and `http` makes any request and returns the status, the main headers and the
+body as text, JSON reindented and HTML reduced to what it says.
+
+```python
+from virtus.tools import calculator, http, websearch, wikipedia
+
+@agent(provider=OpenAI(), capabilities=[websearch, wikipedia, calculator, http])
+async def assistant(question: str) -> str: ...
+```
 
 ## Threads
 
@@ -278,6 +287,7 @@ the user talks over; `speech=` swaps the level-based detector for your own. Unde
 `19_realtime_voice.py` needs the `realtime` extra, `sounddevice` (in the dev group) for the microphone and
 speaker, and a realtime model. `20_websearch.py` and `21_observe.py` need the `websearch` extra.
 `22_academic_researcher.py` is a four-agent team over arXiv and OpenAlex, both keyless.
+`23_toolbox.py` shows the stdlib tools.
 
 ## Development
 
