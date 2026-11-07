@@ -22,6 +22,7 @@ from virtus.message import (
     UserMessage,
 )
 from virtus.middleware import Capability, Middleware, Next
+from virtus.observe import observe
 from virtus.output import Snapshot
 from virtus.provider import LiveProvider, Provider, Session
 from virtus.request import Request
@@ -70,6 +71,7 @@ __all__ = [
     "context",
     "knowledge",
     "memory",
+    "observe",
     "on_input",
     "on_message",
     "tool",

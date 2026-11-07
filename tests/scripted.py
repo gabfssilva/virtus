@@ -12,6 +12,9 @@ class Scripted(Provider):
         self.replies = list(replies)
         self.requests: list[Request] = []
 
+    def __repr__(self) -> str:
+        return "Scripted"
+
     async def complete(self, request: Request) -> AsyncIterator[Delta | AssistantMessage]:
         self.requests.append(request)
         reply = self.replies.pop(0)

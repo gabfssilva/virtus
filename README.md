@@ -183,6 +183,29 @@ async def timing(request: Request, next: Next) -> AsyncIterator[Event]:
 `compaction(max_tokens=32_000, keep=8)` is a middleware that summarizes older messages with the same
 provider once the conversation grows past the limit.
 
+## Observability
+
+`observe()` draws each run as a tree on stderr while it happens: every provider call with its message
+count and tools, the tool calls and what they returned, the answer streamed, and how long each part took.
+Colored on a terminal. It is a capability, so it goes on one agent and its position in the chain picks
+the view: last, it shows what the provider receives, tools included; first, what the caller sees.
+
+```python
+@agent(provider=OpenAI(), capabilities=[clock, observe()])
+async def assistant(question: str) -> str: ...
+```
+
+```
+▶ u1 · What time is it in Lisbon?
+├─ OpenAI('gpt-6-luna') · 1 msg · tools: clock
+│  0.9s · first token 0.6s
+│  ⚙ clock(zone="Europe/Lisbon")
+│  ↳ 14:32 · 0.0s
+├─ OpenAI('gpt-6-luna') · 3 msgs
+│  It is 14:32 in Lisbon.
+└─ ✓ 23 chars · 0.8s · first token 0.4s · 1.7s total
+```
+
 ## Images and audio
 
 An `Image` or `Audio` parameter is attached to the user message and sent to the model. A tool that
@@ -243,7 +266,7 @@ the user talks over; `speech=` swaps the level-based detector for your own. Unde
 `OPENAI_API_KEY`; `13_providers.py` also needs an `ANTHROPIC_API_KEY`, `17_audio.py` and
 `18_image_generation.py` reach their models through OpenRouter with an `OPENROUTER_API_KEY`, and
 `19_realtime_voice.py` needs the `realtime` extra, `sounddevice` (in the dev group) for the microphone and
-speaker, and a realtime model. `20_websearch.py` needs the `websearch` extra.
+speaker, and a realtime model. `20_websearch.py` and `21_observe.py` need the `websearch` extra.
 
 ## Development
 
