@@ -18,6 +18,7 @@ import httpx2
 from mcp import ClientSession, types
 from mcp.client.stdio import StdioServerParameters, stdio_client
 from mcp.client.streamable_http import streamable_http_client
+from mcp.types import PaginatedRequestParams
 from pydantic import BaseModel
 from pydantic_core import to_json
 
@@ -42,10 +43,14 @@ class Stdio:
 
 @dataclass(frozen=True)
 class Http:
-    """A server reached over streamable HTTP; `headers` go on every request."""
+    """A server reached over streamable HTTP; `headers` go on every request.
+
+    `auth` is any `httpx2.Auth`, such as the SDK's `OAuthClientProvider` for a server behind OAuth.
+    """
 
     url: str
     headers: Mapping[str, str] = field(default_factory=dict)
+    auth: httpx2.Auth | None = None
 
 
 @asynccontextmanager
@@ -65,13 +70,14 @@ async def mcp(**servers: Stdio | Http | str) -> AsyncIterator["Served"]:
                     program, *args = shlex.split(command)
                     parameters = StdioServerParameters(command=program, args=args, env=dict(env), cwd=cwd)
                     read, write = await stack.enter_async_context(stdio_client(parameters))
-                case Http(url, headers):
+                case Http(url, headers, auth):
                     timeout = httpx2.Timeout(30, read=300)  # the SDK's defaults: a reply may be a long-lived stream
-                    client = await stack.enter_async_context(httpx2.AsyncClient(headers=dict(headers), timeout=timeout))
+                    http = httpx2.AsyncClient(headers=dict(headers), timeout=timeout, auth=auth)
+                    client = await stack.enter_async_context(http)
                     read, write = await stack.enter_async_context(streamable_http_client(url, http_client=client))
             session = await stack.enter_async_context(ClientSession(read, write))
             await session.initialize()
-            return [Remote.of(name, session, tool) for tool in (await session.list_tools()).tools]
+            return [Remote.of(name, session, tool) for tool in await _all_tools(session)]
 
         tools = [tool for name, server in servers.items() for tool in await connect(name, _spec(server))]
         yield Served(tuple(tools))
@@ -143,6 +149,18 @@ class Remote(Tool):
             texts.append(to_json(result.structured_content).decode())
         content = "\n".join(texts)
         return ToolResult(call.id, call.name, content, bool(result.is_error), tuple(images), tuple(audio))
+
+
+async def _all_tools(session: ClientSession) -> list[types.Tool]:
+    """Every page of the server's tool list."""
+    tools: list[types.Tool] = []
+    cursor: str | None = None
+    while True:
+        page = await session.list_tools(params=PaginatedRequestParams(cursor=cursor) if cursor else None)
+        tools.extend(page.tools)
+        cursor = page.next_cursor
+        if not cursor:
+            return tools
 
 
 def _spec(server: Stdio | Http | str) -> Stdio | Http:

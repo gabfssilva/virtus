@@ -2,6 +2,8 @@ import json
 import sys
 from pathlib import Path
 
+import pytest
+
 from tests.scripted import Scripted, calls
 from virtus import AssistantMessage, Http, Stdio, Tool, ToolCall, agent, mcp, secrets
 from virtus.servers import _spec
@@ -64,6 +66,24 @@ def describe_mcp():
 
             assert (await _run(by_name["a__whoami"])).content == "ana"
             assert (await _run(by_name["b__whoami"])).content == "nobody"
+
+    async def it_lists_every_page_of_tools(monkeypatch: pytest.MonkeyPatch):
+        from mcp import ClientSession, types
+
+        asked: list[str | None] = []
+
+        async def list_tools(self: ClientSession, *, params: types.PaginatedRequestParams | None = None):
+            asked.append(params.cursor if params else None)
+            if params is None:
+                return types.ListToolsResult(tools=[types.Tool(name="first", inputSchema={})], nextCursor="p2")
+            return types.ListToolsResult(tools=[types.Tool(name="second", inputSchema={})])
+
+        monkeypatch.setattr(ClientSession, "list_tools", list_tools)
+
+        async with mcp(calc=SERVER) as tools:
+            names = [t.name for t in tools.tools]
+
+        assert (asked, names) == ([None, "p2"], ["calc__first", "calc__second"])
 
     def it_reads_a_string_as_a_command_or_a_url():
         assert _spec("npx -y server .") == Stdio("npx -y server .")
