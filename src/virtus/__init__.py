@@ -5,6 +5,7 @@ from virtus.capability import Capabilities, context, on_input, on_message
 from virtus.compaction import compaction
 from virtus.journal import Journal, JsonJournal, MemoryJournal
 from virtus.knowledge import Document, Store, knowledge, memory
+from virtus.lazy import lazy
 from virtus.live import Interrupted, Level, Live
 from virtus.message import (
     AssistantMessage,
@@ -81,6 +82,7 @@ __all__ = [
     "compaction",
     "context",
     "knowledge",
+    "lazy",
     "mcp",
     "memory",
     "observe",
