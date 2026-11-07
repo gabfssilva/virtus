@@ -9,6 +9,7 @@ from virtus import (
     AssistantMessage,
     Capability,
     Delta,
+    Image,
     Provider,
     Request,
     ToolResult,
@@ -298,6 +299,31 @@ def describe_dispatch():
         assert isinstance(result, ToolResult)
         assert result.is_error
         assert "topic" in result.content
+
+    async def it_reports_a_failing_address_without_losing_the_others():
+        research = Scripted(AssistantMessage("a"))  # the second address finds no reply and fails
+        lead_provider = Scripted(_dispatch({"topic": "insects"}, "researcher:one", "researcher:two"), _done())
+        lead = _lead_for(_researcher_with(research), lead_provider)
+
+        await lead("go")
+
+        result = lead_provider.requests[1].messages[-1]
+        assert isinstance(result, ToolResult)
+        assert not result.is_error
+        replies = json.loads(result.content)
+        assert replies["researcher:one"] == "a"
+        assert replies["researcher:two"]["error"].startswith("IndexError")
+
+    async def it_refuses_agents_with_media_parameters():
+        @agent(provider=Scripted())
+        async def describer(picture: Image, question: str = "what is it?") -> str:
+            """{question} {picture}"""
+            ...
+
+        with pytest.raises(TypeError, match="describer: can't be dispatched to; the model can't fill picture"):
+
+            @agent(provider=Scripted(), capabilities=[describer])
+            async def lead(message: str) -> str: ...
 
     async def it_rejects_addresses_of_unknown_agents():
         lead_provider = Scripted(_dispatch({"topic": "hello"}, "nobody"), _done())

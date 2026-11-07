@@ -13,11 +13,11 @@ from collections.abc import AsyncIterator, Callable, Mapping
 from dataclasses import dataclass, replace
 from functools import reduce
 from operator import or_
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, get_args
 
 from pydantic import Field, TypeAdapter, create_model
 
-from virtus.message import Event
+from virtus.message import Audio, Event, Image
 from virtus.middleware import Middleware, Next
 from virtus.request import Request
 from virtus.tool import Tool
@@ -36,6 +36,16 @@ class Target:
 
 
 @dataclass(frozen=True)
+class Failed:
+    """What a failing address answers with, so the other addresses' replies still come back."""
+
+    error: str
+
+    def as_reply(self) -> dict[str, str]:
+        return {"error": self.error}
+
+
+@dataclass(frozen=True)
 class Dispatch(Tool):
     targets: tuple[Target, ...]
 
@@ -47,14 +57,21 @@ class Dispatch(Tool):
             if unknown := [address for address in to if address.partition(":")[0] not in by_name]:
                 raise ValueError(f"unknown agents: {', '.join(unknown)}; known: {', '.join(by_name)}")
 
-            async def deliver(address: str) -> object:
+            async def deliver(address: str) -> object | Failed:
+                """The agent's reply, or `Failed`, so one address failing doesn't lose the others' replies."""
                 name, _, thread = address.partition(":")
                 target = by_name[name]
-                values = dict(target.agent.parameters.model_validate(arguments))
-                return await target.conversation(parent, thread or None).send(target.agent.input(**values))
+                try:
+                    values = dict(target.agent.parameters.model_validate(arguments))
+                    return await target.conversation(parent, thread or None).send(target.agent.input(**values))
+                except Exception as error:
+                    return Failed(f"{type(error).__name__}: {error}")
 
-            replies = await asyncio.gather(*(deliver(address) for address in to))
-            return dict(zip(to, replies, strict=True))
+            replies = dict(zip(to, await asyncio.gather(*(deliver(address) for address in to)), strict=True))
+            failed = {address: reply for address, reply in replies.items() if isinstance(reply, Failed)}
+            if failed and len(failed) == len(replies):
+                raise ValueError("\n".join(f"{address}: {reply.error}" for address, reply in failed.items()))
+            return {address: r.as_reply() if isinstance(r, Failed) else r for address, r in replies.items()}
 
         return cls("dispatch", DESCRIPTION, PARAMETERS, dispatch, targets)
 
@@ -70,7 +87,14 @@ class Dispatch(Tool):
 
 
 def dispatching(target: Target) -> Middleware:
-    """Middleware adding `target` to the request's `dispatch` tool, creating the tool if it is the first."""
+    """Middleware adding `target` to the request's `dispatch` tool, creating the tool if it is the first.
+
+    An agent with an `Image` or `Audio` parameter is refused: the model has no way to pass media.
+    """
+    fields = target.agent.parameters.model_fields.items()
+    if media := [name for name, field in fields if _media(field.annotation)]:
+        names = ", ".join(media)
+        raise TypeError(f"{target.agent.name}: can't be dispatched to; the model can't fill {names} with media")
 
     async def add(request: Request, next: Next) -> AsyncIterator[Event]:
         parent = request.thread
@@ -94,6 +118,10 @@ def dispatching(target: Target) -> Middleware:
 
 def next_dispatch(request: Request) -> Dispatch | None:
     return next((tool for tool in request.tools if isinstance(tool, Dispatch)), None)
+
+
+def _media(annotation: object) -> bool:
+    return annotation in (Image, Audio) or any(_media(inner) for inner in get_args(annotation))
 
 
 HEADER = "Agents you can `dispatch` to:"

@@ -170,8 +170,10 @@ Agents in another agent's capabilities are reached through one tool, `dispatch(t
 many there are. `arguments` are the addressed agent's template parameters, so the request is formatted
 exactly as a direct call; the model addresses `researcher` for a one-off request or `researcher:bees` to
 keep a conversation going, and a list of addresses delivers the same request to all of them at once,
-replies keyed by address. The agents and their open conversations are listed in the system prompt; the
-conversations belong to the caller's thread.
+replies keyed by address. An address that fails answers with its error while the others still reply. The
+agents and their open conversations are listed in the system prompt; the conversations belong to the
+caller's thread. An agent with an `Image` or `Audio` parameter cannot be dispatched to: the model has no
+way to pass media.
 
 ```python
 @agent(provider=OpenAI(), system="You are a researcher.")
