@@ -1,21 +1,25 @@
-"""An agent used as a capability becomes a tool. The caller may name a thread to keep talking to it."""
+"""Agents used as capabilities are reached through one `dispatch` tool, with the agent's own arguments:
+`researcher` for a one-off request, `researcher:subject` to keep talking to it, several addresses to fan out."""
 
 import asyncio
 
-from virtus import agent
+from virtus import agent, observe
 from virtus.providers import OpenAI
 
+# Chat Completions only takes function tools from gpt-6 with reasoning off; the Responses API has no such limit.
+model = OpenAI(reasoning_effort="none")
 
-@agent(provider=OpenAI(), system="You are a researcher. Answer in two or three sentences.")
+
+@agent(provider=model, system="You are a researcher. Answer in two or three sentences.")
 async def researcher(topic: str) -> str:
     """Research {topic}."""
     ...
 
 
 @agent(
-    provider=OpenAI(),
-    system="Delegate research to the researcher tool. Keep one named thread per subject so follow-ups have context.",
-    capabilities=[researcher],
+    provider=model,
+    system="Dispatch research to the researcher. Keep one named conversation per subject so follow-ups have context.",
+    capabilities=[researcher, observe()],
 )
 async def lead(request: str) -> str: ...
 

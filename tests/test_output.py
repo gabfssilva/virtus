@@ -166,14 +166,16 @@ def describe_items():
         @agent(provider=research)
         async def listing(topic: str) -> AsyncIterator[Person]: ...
 
-        lead_provider = Scripted(calls(("listing", {"topic": "x"})), AssistantMessage("done"))
+        delivery = calls(("dispatch", {"to": ["listing"], "arguments": {"topic": "x"}}))
+        lead_provider = Scripted(delivery, AssistantMessage("done"))
 
         @agent(provider=lead_provider, capabilities=[listing])
         async def lead(message: str) -> str: ...
 
         await lead("go")
 
-        assert lead_provider.requests[1].messages[-1] == ToolResult("call-0", "listing", '[{"name":"Ana","age":30}]')
+        result = lead_provider.requests[1].messages[-1]
+        assert result == ToolResult("call-0", "dispatch", '{"listing":[{"name":"Ana","age":30}]}')
 
 
 def describe_snapshot():

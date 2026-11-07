@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Final, Protocol, runtime_checkable
 from uuid import uuid4
 from weakref import WeakValueDictionary
 
+from virtus.dispatch import Target, dispatching
 from virtus.journal import Journal, MemoryJournal
 from virtus.live import Live
 from virtus.message import (
@@ -25,7 +26,6 @@ from virtus.message import (
 from virtus.middleware import Capability, Middleware, Next
 from virtus.provider import LiveProvider, Session
 from virtus.request import Request
-from virtus.tool import Tool
 
 if TYPE_CHECKING:
     from virtus.agent import Agent
@@ -72,7 +72,7 @@ class Thread[**P, R](Capability, Conversation):
     Without a journal of its own the thread gets a private `MemoryJournal`, which is what one-off calls
     use: nothing of theirs reaches the agent's journal.
 
-    Used as a capability, every delegation from any caller goes to this one thread.
+    Used as a capability, every message dispatched to its agent, from any caller, lands in this one thread.
     """
 
     def __init__(self, agent: Agent[P, R], path: tuple[str, ...] | None = None, journal: Journal | None = None):
@@ -119,10 +119,7 @@ class Thread[**P, R](Capability, Conversation):
             yield Live(session, lambda message: self._stream(message, session))
 
     def middleware(self) -> tuple[Middleware, ...]:
-        async def run(**arguments: object) -> object:
-            return await self.send(self.agent.input(**arguments))
-
-        return Tool(self.agent.name, self.agent.description, self.agent.parameters, run).middleware()
+        return (dispatching(Target(self.agent, lambda parent, thread: self)),)
 
     async def send(self, message: UserMessage) -> object:
         return await self.agent.output.final(self._stream(message))

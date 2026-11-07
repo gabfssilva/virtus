@@ -132,8 +132,12 @@ await thread.resume()                     # pick up where the crash left it
 
 ## Delegation
 
-An agent in another agent's capabilities becomes a tool. The calling model may name a thread to
-keep talking to the same sub-agent; those threads belong to the caller's thread.
+Agents in another agent's capabilities are reached through one tool, `dispatch(to, arguments)`, however
+many there are. `arguments` are the addressed agent's template parameters, so the request is formatted
+exactly as a direct call; the model addresses `researcher` for a one-off request or `researcher:bees` to
+keep a conversation going, and a list of addresses delivers the same request to all of them at once,
+replies keyed by address. The agents and their open conversations are listed in the system prompt; the
+conversations belong to the caller's thread.
 
 ```python
 @agent(provider=OpenAI(), system="You are a researcher.")
@@ -142,7 +146,11 @@ async def researcher(topic: str) -> str:
     ...
 
 
-@agent(provider=OpenAI(), capabilities=[researcher])
+@agent(provider=OpenAI(), system="You write short, plain paragraphs.")
+async def writer(notes: str) -> str: ...
+
+
+@agent(provider=OpenAI(), capabilities=[researcher, writer])
 async def lead(request: str) -> str: ...
 ```
 

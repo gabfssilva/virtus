@@ -11,7 +11,6 @@ from virtus import (
     Delta,
     Provider,
     Request,
-    ToolCall,
     ToolResult,
     UserMessage,
     agent,
@@ -179,19 +178,14 @@ def describe_agent_thread():
         await chat.thread("user-42")("second")
         assert provider.requests[1].messages == (UserMessage("second"),)
 
-    def it_rejects_a_parameter_named_thread():
-        with pytest.raises(TypeError, match="reserved"):
-
-            @agent(provider=Scripted())
-            async def chat(thread: str) -> str: ...
 
 
-def describe_delegation():
-    async def it_makes_one_off_requests_without_a_thread_name():
+def describe_dispatch():
+    async def it_makes_one_off_requests_without_a_conversation_name():
         research = Scripted(AssistantMessage("bees dance"), AssistantMessage("wasps sting"))
         lead = _lead_for(
             _researcher_with(research),
-            Scripted(_delegation({"topic": "bees"}), _delegation({"topic": "wasps"}), AssistantMessage("done")),
+            Scripted(_dispatch({"topic": "bees"}, "researcher"), _dispatch({"topic": "wasps"}, "researcher"), _done()),
         )
 
         await lead("go")
@@ -206,9 +200,9 @@ def describe_delegation():
         lead = _lead_for(
             _researcher_with(research),
             Scripted(
-                _delegation({"topic": "bees", "thread": "insects"}),
-                _delegation({"topic": "compared to wasps", "thread": "insects"}),
-                AssistantMessage("done"),
+                _dispatch({"topic": "bees"}, "researcher:insects"),
+                _dispatch({"topic": "compared to wasps"}, "researcher:insects"),
+                _done(),
             ),
         )
 
@@ -220,33 +214,29 @@ def describe_delegation():
             UserMessage("Research compared to wasps"),
         )
 
-    async def it_keeps_different_names_apart():
+    async def it_delivers_one_message_to_several_addresses_and_keys_the_replies():
         research = Scripted(AssistantMessage("a"), AssistantMessage("b"))
-        lead = _lead_for(
-            _researcher_with(research),
-            Scripted(
-                _delegation({"topic": "bees", "thread": "one"}, {"topic": "wasps", "thread": "two"}),
-                AssistantMessage("done"),
-            ),
-        )
+        lead_provider = Scripted(_dispatch({"topic": "insects"}, "researcher:one", "researcher:two"), _done())
+        lead = _lead_for(_researcher_with(research), lead_provider)
 
-        await lead("go")
+        await lead.thread("ana")("go")
 
-        assert {r.messages for r in research.requests} == {
-            (UserMessage("Research bees"),),
-            (UserMessage("Research wasps"),),
-        }
+        assert [r.messages for r in research.requests] == [(UserMessage("Research insects"),)] * 2
+        assert lead.thread("ana").children == (("researcher", "one"), ("researcher", "two"))
+        result = lead_provider.requests[1].messages[-1]
+        assert isinstance(result, ToolResult)
+        assert json.loads(result.content) == {"researcher:one": "a", "researcher:two": "b"}
 
-    async def it_scopes_threads_to_the_calling_conversation():
+    async def it_scopes_conversations_to_the_calling_thread():
         research = Scripted(AssistantMessage("for ana"), AssistantMessage("for bia"))
         researcher = _researcher_with(research)
         lead = _lead_for(
             researcher,
             Scripted(
-                _delegation({"topic": "bees", "thread": "x"}),
-                AssistantMessage("done"),
-                _delegation({"topic": "wasps", "thread": "x"}),
-                AssistantMessage("done"),
+                _dispatch({"topic": "bees"}, "researcher:x"),
+                _done(),
+                _dispatch({"topic": "wasps"}, "researcher:x"),
+                _done(),
             ),
         )
 
@@ -257,21 +247,72 @@ def describe_delegation():
         assert lead.thread("ana").children == (("researcher", "x"),)
         assert lead.thread("ana").child(("researcher", "x"), researcher).id == "ana/researcher/x"
 
-    async def it_tells_the_model_which_conversations_are_open():
-        lead_provider = Scripted(_delegation({"topic": "bees", "thread": "insects"}), AssistantMessage("done"))
+    async def it_lists_the_agents_and_their_open_conversations_in_the_system_prompt():
+        lead_provider = Scripted(_dispatch({"topic": "bees"}, "researcher:insects"), _done())
         lead = _lead_for(_researcher_with(Scripted(AssistantMessage("ok"))), lead_provider)
 
         await lead.thread()("go")
 
-        assert lead_provider.requests[0].system == ""
-        assert lead_provider.requests[1].system == "Open conversations with researcher: insects"
+        listing = "Agents you can `dispatch` to:\n- researcher: Research {topic}"
+        assert lead_provider.requests[0].system == listing
+        assert lead_provider.requests[1].system == f"{listing} Open conversations: insects"
+
+    async def it_is_one_tool_however_many_agents_there_are():
+        lead_provider = Scripted(_dispatch({"topic": "hello"}, "researcher", "writer"), _done())
+
+        @agent(provider=Scripted(AssistantMessage("written")))
+        async def writer(topic: str) -> str:
+            """Write about {topic}"""
+            ...
+
+        researcher = _researcher_with(Scripted(AssistantMessage("ok")))
+
+        @agent(provider=lead_provider, system="Lead.", capabilities=[researcher, writer])
+        async def lead(message: str) -> str: ...
+
+        await lead("go")
+
+        assert [t.name for t in lead_provider.requests[0].tools] == ["dispatch"]
+        assert lead_provider.requests[0].system == (
+            "Lead.\n\nAgents you can `dispatch` to:\n"
+            "- researcher: Research {topic}\n"
+            "- writer: Write about {topic}"
+        )
+        [dispatch] = lead_provider.requests[0].tools
+        topic = {"properties": {"topic": {"title": "Topic", "type": "string"}}, "required": ["topic"], "type": "object"}
+        assert dispatch.schema["$defs"] == {
+            "researcher": {**topic, "title": "researcher"},
+            "writer": {**topic, "title": "writer"},
+        }
+        result = lead_provider.requests[1].messages[-1]
+        assert isinstance(result, ToolResult)
+        assert json.loads(result.content) == {"researcher": "ok", "writer": "written"}
+
+    async def it_rejects_arguments_the_template_does_not_take():
+        lead_provider = Scripted(_dispatch({"subject": "bees"}, "researcher"), _done())
+        lead = _lead_for(_researcher_with(Scripted()), lead_provider)
+
+        await lead("go")
+
+        result = lead_provider.requests[1].messages[-1]
+        assert isinstance(result, ToolResult)
+        assert result.is_error
+        assert "topic" in result.content
+
+    async def it_rejects_addresses_of_unknown_agents():
+        lead_provider = Scripted(_dispatch({"topic": "hello"}, "nobody"), _done())
+        lead = _lead_for(_researcher_with(Scripted()), lead_provider)
+
+        await lead("go")
+
+        result = lead_provider.requests[1].messages[-1]
+        assert isinstance(result, ToolResult)
+        assert result.is_error
+        assert "unknown agents: nobody; known: researcher" in result.content
 
     async def it_disposes_child_threads_with_the_parent():
         researcher = _researcher_with(Scripted(AssistantMessage("ok")))
-        lead = _lead_for(
-            researcher,
-            Scripted(_delegation({"topic": "bees", "thread": "insects"}), AssistantMessage("done")),
-        )
+        lead = _lead_for(researcher, Scripted(_dispatch({"topic": "bees"}, "researcher:insects"), _done()))
         parent = lead.thread()
         await parent("go")
         child = parent.child(("researcher", "insects"), researcher)
@@ -288,10 +329,10 @@ def describe_delegation():
         lead = _lead_for(
             shared,
             Scripted(
-                _delegation({"topic": "bees"}),
-                AssistantMessage("done"),
-                _delegation({"topic": "wasps"}),
-                AssistantMessage("done"),
+                _dispatch({"topic": "bees"}, "researcher"),
+                _done(),
+                _dispatch({"topic": "wasps"}, "researcher"),
+                _done(),
             ),
         )
 
@@ -313,10 +354,12 @@ def _lead_for(researcher: Capability, provider: Scripted):
     return lead
 
 
-def _delegation(*requested: dict[str, object]) -> AssistantMessage:
-    return AssistantMessage(
-        tool_calls=tuple(ToolCall(f"call-{i}", "researcher", json.dumps(args)) for i, args in enumerate(requested))
-    )
+def _dispatch(arguments: dict[str, object], *to: str) -> AssistantMessage:
+    return calls(("dispatch", {"to": list(to), "arguments": arguments}))
+
+
+def _done() -> AssistantMessage:
+    return AssistantMessage("done")
 
 
 def _researcher_with(provider: Scripted):

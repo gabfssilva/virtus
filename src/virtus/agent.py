@@ -1,20 +1,20 @@
 import inspect
 from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from typing import Final, overload
 from uuid import uuid4
 
-from pydantic import BaseModel, Field, create_model
+from pydantic import BaseModel
 
 from virtus.capability import flatten
+from virtus.dispatch import Target, dispatching
 from virtus.journal import Journal, MemoryJournal
-from virtus.message import Audio, Event, Image, UserMessage, placeholder
-from virtus.middleware import Capability, Middleware, Next
+from virtus.message import Audio, Image, UserMessage, placeholder
+from virtus.middleware import Capability, Middleware
 from virtus.output import Output, output
 from virtus.provider import Provider
-from virtus.request import Request
-from virtus.thread import Thread
-from virtus.tool import Tool, parameters_model
+from virtus.thread import Conversation, Thread
+from virtus.tool import parameters_model
 
 
 class Unset:
@@ -32,10 +32,11 @@ class Agent[**P, R](Capability):
     agent declared `-> Person` has `R = Awaitable[Person]` and one declared `-> AsyncIterator[Person]`
     has `R = AsyncIterator[Person]`.
 
-    Used as a capability, the agent becomes a tool other agents delegate to. The tool takes an
-    optional `thread` name chosen by the calling model: reusing a name continues that conversation
-    with this agent, omitting it makes a one-off request. These threads belong to the caller's
-    thread, so separate conversations never share them.
+    Used as a capability, the agent becomes a target of the caller's `dispatch` tool (`virtus.dispatch`):
+    the calling model addresses it by name for a one-off request, or as `name:thread` to keep a
+    conversation going, and passes the template's arguments, which format the message exactly as a
+    direct call does. Those threads belong to the caller's thread, so separate conversations never
+    share them.
     """
 
     def __init__(
@@ -69,8 +70,6 @@ class Agent[**P, R](Capability):
 
         if not self._prompt:
             raise TypeError(f"{self.name}: an agent needs parameters or a docstring")
-        if "thread" in self.parameters.model_fields:
-            raise TypeError(f"{self.name}: `thread` is reserved for delegation and can't be a parameter")
 
     def __call__(self, *args: P.args, **kwargs: P.kwargs) -> R:
         return Thread(self)(*args, **kwargs)
@@ -132,37 +131,10 @@ class Agent[**P, R](Capability):
         return UserMessage(self._prompt.format(**text), images, audio)
 
     def middleware(self) -> tuple[Middleware, ...]:
-        parameters = create_model(
-            self.name,
-            __base__=self.parameters,
-            thread=(
-                str | None,
-                Field(
-                    None,
-                    description=(
-                        f"Name of a conversation with {self.name}. Reuse a name to continue that "
-                        "conversation; omit it for a one-off request."
-                    ),
-                ),
-            ),
-        )
+        def conversation(parent: Conversation, thread: str | None) -> Conversation:
+            return parent.child((self.name, thread), self) if thread else Thread(self)
 
-        async def delegate(request: Request, next: Next) -> AsyncIterator[Event]:
-            parent = request.thread
-
-            async def run(thread: str | None = None, **arguments: object) -> object:
-                target = parent.child((self.name, thread), self) if thread else Thread(self)
-                return await target.send(self.input(**arguments))
-
-            names = [name for agent, name in parent.children if agent == self.name]
-            note = f"Open conversations with {self.name}: {', '.join(names)}" if names else ""
-            system = "\n\n".join(part for part in (request.system, note) if part)
-            tool = Tool(self.name, self.description, parameters, run)
-
-            async for event in next(replace(request, system=system, tools=(*request.tools, tool))):
-                yield event
-
-        return (delegate,)
+        return (dispatching(Target(self, conversation)),)
 
 
 def agent(

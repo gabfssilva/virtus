@@ -222,4 +222,6 @@ def _lead(research: Provider, provider: Provider, journal: JsonJournal):
 
 def _delegating(topic: str) -> Scripted:
     """A lead that sends `topic` to the researcher on the thread named "insects", then finishes."""
-    return Scripted(calls(("researcher", {"topic": topic, "thread": "insects"})), AssistantMessage("done"))
+    return Scripted(
+        calls(("dispatch", {"to": ["researcher:insects"], "arguments": {"topic": topic}})), AssistantMessage("done")
+    )

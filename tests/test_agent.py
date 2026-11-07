@@ -110,8 +110,8 @@ def describe_stream():
         ]
 
 
-def describe_delegation():
-    async def it_exposes_an_agent_as_a_tool_with_its_parameters():
+def describe_dispatch():
+    async def it_exposes_an_agent_through_the_dispatch_tool_with_its_description():
         research_provider = Scripted(AssistantMessage("Bees dance"))
 
         @agent(provider=research_provider, description="Researches a topic")
@@ -119,17 +119,37 @@ def describe_delegation():
             """Research {topic}"""
             ...
 
-        lead_provider = Scripted(calls(("researcher", {"topic": "bees"})), AssistantMessage("Done"))
+        delivery = calls(("dispatch", {"to": ["researcher"], "arguments": {"topic": "bees"}}))
+        lead_provider = Scripted(delivery, AssistantMessage("Done"))
 
         @agent(provider=lead_provider, capabilities=[researcher])
         async def lead(task: str) -> str: ...
 
         assert await lead("write about bees") == "Done"
 
-        [delegate] = lead_provider.requests[0].tools
-        assert (delegate.name, delegate.description) == ("researcher", "Researches a topic")
+        [dispatch] = lead_provider.requests[0].tools
+        assert dispatch.name == "dispatch"
+        assert list(dispatch.parameters.model_fields) == ["to", "arguments"]
+        assert dispatch.schema["properties"] == {
+            "to": {
+                "description": "Addresses: `agent` or `agent:conversation`.",
+                "items": {"type": "string"},
+                "minItems": 1,
+                "title": "To",
+                "type": "array",
+            },
+            "arguments": {
+                "additionalProperties": True,
+                "description": "The arguments of the addressed agent.",
+                "title": "researcher",
+                "type": "object",
+                "properties": {"topic": {"title": "Topic", "type": "string"}},
+                "required": ["topic"],
+            },
+        }
+        assert lead_provider.requests[0].system.endswith("- researcher: Researches a topic")
         assert research_provider.requests[0].messages == (UserMessage("Research bees"),)
-        assert lead_provider.requests[1].messages[-1] == ToolResult("call-0", "researcher", "Bees dance")
+        assert lead_provider.requests[1].messages[-1] == ToolResult("call-0", "dispatch", '{"researcher":"Bees dance"}')
 
 
 def describe_images():
