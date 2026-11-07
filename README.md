@@ -7,6 +7,7 @@ tools, memory, guardrails, compaction, delegation, is a *capability* passed in a
 ```bash
 uv add virtus                 # OpenAI-compatible providers included
 uv add "virtus[anthropic]"    # plus the Anthropic provider
+uv add "virtus[mcp]"          # plus MCP servers as tools
 ```
 
 Requires Python 3.12. Not yet stable; the API may change between minor versions.
@@ -123,6 +124,18 @@ the tool returns. Put it after the tools it guards.
 ```python
 @agent(provider=OpenAI(), capabilities=[http, secrets(github=(os.environ["GITHUB_TOKEN"], "GitHub token"))])
 async def dev(task: str) -> str: ...
+```
+
+`mcp(name=server, ...)` connects to MCP servers for the length of a block and offers their tools under
+`name__*`, with the schemas the servers declare. A string is a command line (stdio) or a URL (streamable
+HTTP); `Stdio(command, env=...)` and `Http(url, headers=...)` carry the server's credentials, which the
+model never sees. Needs the `mcp` extra.
+
+```python
+async with mcp(fs="npx -y @modelcontextprotocol/server-filesystem .", docs=Http(url, headers=auth)) as tools:
+
+    @agent(provider=OpenAI(), capabilities=[tools])
+    async def clerk(request: str) -> str: ...
 ```
 
 ## Threads
@@ -306,7 +319,7 @@ the user talks over; `speech=` swaps the level-based detector for your own. Unde
 speaker, and a realtime model. `20_websearch.py` and `21_observe.py` need the `websearch` extra.
 `22_academic_researcher.py` is a four-agent team over arXiv and OpenAlex, both keyless.
 `23_toolbox.py`, `24_workspace.py` and `25_vault.py` show the stdlib tools, the workspace and
-a secret the agent uses without seeing.
+a secret the agent uses without seeing; `26_mcp.py` needs the `mcp` extra and `npx`.
 
 ## Development
 

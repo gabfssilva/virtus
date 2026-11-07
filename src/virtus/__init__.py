@@ -1,3 +1,5 @@
+from typing import TYPE_CHECKING
+
 from virtus.agent import Agent, agent
 from virtus.capability import Capabilities, context, on_input, on_message
 from virtus.compaction import compaction
@@ -31,6 +33,9 @@ from virtus.tool import Tool, tool
 from virtus.vault import secrets
 from virtus.workspace import workspace
 
+if TYPE_CHECKING:
+    from virtus.servers import Http, Stdio, mcp
+
 __all__ = [
     "Agent",
     "AssistantMessage",
@@ -43,6 +48,7 @@ __all__ = [
     "Delta",
     "Document",
     "Event",
+    "Http",
     "Image",
     "ImageType",
     "Interrupted",
@@ -60,6 +66,7 @@ __all__ = [
     "Request",
     "Session",
     "Snapshot",
+    "Stdio",
     "Store",
     "TextDelta",
     "Thread",
@@ -72,6 +79,7 @@ __all__ = [
     "compaction",
     "context",
     "knowledge",
+    "mcp",
     "memory",
     "observe",
     "on_input",
@@ -80,3 +88,12 @@ __all__ = [
     "tool",
     "workspace",
 ]
+
+
+def __getattr__(name: str) -> object:
+    """`mcp`, `Stdio` and `Http` load on demand, so the `mcp` extra is only needed by those who use it."""
+    if name in ("Http", "Stdio", "mcp"):
+        from virtus import servers
+
+        return getattr(servers, name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

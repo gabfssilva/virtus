@@ -18,6 +18,9 @@ realtime = [
 websearch = [
     "ddgs>=9.16",
 ]
+mcp = [
+    "mcp>=2.3",
+]
 
 [build-system]
 requires = ["hatchling"]
