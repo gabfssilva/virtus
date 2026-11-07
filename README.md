@@ -104,7 +104,8 @@ class Todo(Capabilities):
 ```
 
 `virtus.tools` has ready-made tools. `websearch` searches the web through `ddgs`, a metasearch
-over Bing, Google, DuckDuckGo and others; no key, installed by the `websearch` extra. The rest
+over Bing, Google, DuckDuckGo and others; `kind` picks pages, news, images, videos or books and
+`period` the last day, week, month or year; no key, installed by the `websearch` extra. The rest
 need no key and no extra: `wikipedia` looks a topic up and answers `Article`s, `arxiv` and
 `openalex` search preprints and the published record and answer `Paper`s, `calculator` evaluates
 arithmetic exactly, and `http` makes any request and returns the status, the main headers and the

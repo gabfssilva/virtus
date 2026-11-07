@@ -1,4 +1,5 @@
-"""`websearch` from `virtus.tools` lets the agent look things up on the web. Needs the `websearch` extra; no key."""
+"""`websearch` from `virtus.tools` lets the agent look things up on the web: pages by default, or news, images,
+videos and books through `kind`, within a `period`. Needs the `websearch` extra; no key."""
 
 import asyncio
 
@@ -20,6 +21,7 @@ async def assistant(question: str) -> str: ...
 
 async def main() -> None:
     print(await assistant("What does asyncio.TaskGroup do, in one sentence?"))
+    print(await assistant("One piece of Python news from the last week, with its date."))
 
 
 asyncio.run(main())
