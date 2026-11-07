@@ -103,7 +103,9 @@ class Todo(Capabilities):
 ```
 
 `virtus.tools` has ready-made tools. `websearch` searches the web through `ddgs`, a metasearch
-over Bing, Google, DuckDuckGo and others; no key, installed by the `websearch` extra.
+over Bing, Google, DuckDuckGo and others; no key, installed by the `websearch` extra. The rest
+need no key and no extra: `arxiv` and `openalex` search preprints and the published record and
+answer `Paper`s.
 
 ## Threads
 
@@ -275,6 +277,7 @@ the user talks over; `speech=` swaps the level-based detector for your own. Unde
 `18_image_generation.py` reach their models through OpenRouter with an `OPENROUTER_API_KEY`, and
 `19_realtime_voice.py` needs the `realtime` extra, `sounddevice` (in the dev group) for the microphone and
 speaker, and a realtime model. `20_websearch.py` and `21_observe.py` need the `websearch` extra.
+`22_academic_researcher.py` is a four-agent team over arXiv and OpenAlex, both keyless.
 
 ## Development
 
