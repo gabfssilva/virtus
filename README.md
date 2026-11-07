@@ -116,6 +116,15 @@ from virtus.tools import calculator, http, websearch, wikipedia
 async def assistant(question: str) -> str: ...
 ```
 
+`secrets(...)` lets the agent use values it never sees. It writes `{{secrets.github}}` where a tool
+argument needs the token; the value goes in just before the tool runs and is redacted out of whatever
+the tool returns. Put it after the tools it guards.
+
+```python
+@agent(provider=OpenAI(), capabilities=[http, secrets(github=(os.environ["GITHUB_TOKEN"], "GitHub token"))])
+async def dev(task: str) -> str: ...
+```
+
 ## Threads
 
 A thread is a conversation kept across calls. Its history lives in the agent's journal, in memory by
@@ -296,7 +305,8 @@ the user talks over; `speech=` swaps the level-based detector for your own. Unde
 `19_realtime_voice.py` needs the `realtime` extra, `sounddevice` (in the dev group) for the microphone and
 speaker, and a realtime model. `20_websearch.py` and `21_observe.py` need the `websearch` extra.
 `22_academic_researcher.py` is a four-agent team over arXiv and OpenAlex, both keyless.
-`23_toolbox.py` and `24_workspace.py` show the stdlib tools and the workspace.
+`23_toolbox.py`, `24_workspace.py` and `25_vault.py` show the stdlib tools, the workspace and
+a secret the agent uses without seeing.
 
 ## Development
 

@@ -28,6 +28,7 @@ from virtus.provider import LiveProvider, Provider, Session
 from virtus.request import Request
 from virtus.thread import Conversation, Thread
 from virtus.tool import Tool, tool
+from virtus.vault import secrets
 from virtus.workspace import workspace
 
 __all__ = [
@@ -75,6 +76,7 @@ __all__ = [
     "observe",
     "on_input",
     "on_message",
+    "secrets",
     "tool",
     "workspace",
 ]
