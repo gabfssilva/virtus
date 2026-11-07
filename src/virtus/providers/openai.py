@@ -37,6 +37,7 @@ from virtus.message import (
     ToolCall,
     ToolCallDelta,
     ToolResult,
+    Usage,
     UserMessage,
 )
 from virtus.provider import LiveProvider, Provider, Session
@@ -87,14 +88,18 @@ class OpenAI(Provider, LiveProvider):
             # The SDK's `modalities` does not admit `image`, which OpenRouter and Gemini-style servers take.
             extra_body={"modalities": ["text", *request.media]} if request.media else None,
             stream=True,
+            stream_options={"include_usage": True},
         )
 
+        usage: Usage | None = None
         text: list[str] = []
         sound: list[bytes] = []
         images: list[Image] = []
         fragments: dict[int, list[ChoiceDeltaToolCall]] = {}
 
         async for chunk in stream:
+            if chunk.usage:
+                usage = Usage(chunk.usage.prompt_tokens, chunk.usage.completion_tokens)
             for choice in chunk.choices:
                 delta = choice.delta
                 if delta.content:
@@ -119,6 +124,7 @@ class OpenAI(Provider, LiveProvider):
             tuple(_tool_call(f) for _, f in sorted(fragments.items())),
             tuple(images),
             Audio.pcm16(b"".join(sound)) if sound else None,
+            usage,
         )
 
     @asynccontextmanager

@@ -117,10 +117,11 @@ class _Run:
                 self.heard += len(data)
             case ToolCallDelta():
                 self._token()
-            case AssistantMessage(content=content, tool_calls=calls):
+            case AssistantMessage(content=content, tool_calls=calls, usage=usage):
                 self._end_typing()
                 elapsed = f"{perf_counter() - self.step_started:.1f}s"
                 first = f" · first token {self.first_token:.1f}s" if self.first_token is not None else ""
+                first += f" · {usage.input} in, {usage.output} out" if usage else ""
                 if calls:
                     console.line(console.dim(f"│  {elapsed}{first}"))
                     for call in calls:

@@ -13,6 +13,7 @@ from virtus import (
     Provider,
     Request,
     ToolResult,
+    Usage,
     UserMessage,
     agent,
     on_input,
@@ -164,6 +165,18 @@ def describe_agent_thread():
             UserMessage("second"),
             AssistantMessage("two"),
         )
+
+    async def it_sums_the_usage_of_its_provider_calls():
+        provider = Scripted(AssistantMessage("a", usage=Usage(10, 2)), AssistantMessage("b", usage=Usage(30, 4)))
+
+        @agent(provider=provider)
+        async def chat(message: str) -> str: ...
+
+        thread = chat.thread("ana")
+        await thread("one")
+        await thread("two")
+
+        assert thread.usage == Usage(40, 6)
 
     async def it_starts_over_after_dispose():
         provider = Scripted(AssistantMessage("one"), AssistantMessage("two"))

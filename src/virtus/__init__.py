@@ -21,6 +21,7 @@ from virtus.message import (
     ToolCall,
     ToolCallDelta,
     ToolResult,
+    Usage,
     UserMessage,
 )
 from virtus.middleware import Capability, Middleware, Next
@@ -74,6 +75,7 @@ __all__ = [
     "ToolCall",
     "ToolCallDelta",
     "ToolResult",
+    "Usage",
     "UserMessage",
     "agent",
     "compaction",

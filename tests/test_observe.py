@@ -5,7 +5,7 @@ from itertools import count
 import pytest
 
 from tests.scripted import Scripted, calls
-from virtus import AssistantMessage, agent, observe, tool
+from virtus import AssistantMessage, Usage, agent, observe, tool
 
 
 @pytest.fixture
@@ -41,6 +41,17 @@ def describe_observe():
             "│  It is noon.\n"
             "└─ ✓ 11 chars · 2.0s · first token 1.0s · 8.0s total\n"
         )
+
+    async def it_shows_the_tokens_each_call_consumed(ticking: None):
+        out = io.StringIO()
+        reply = AssistantMessage("Noon.", usage=Usage(120, 8))
+
+        @agent(provider=Scripted(reply), capabilities=[observe(out, color=False)])
+        async def assistant(message: str) -> str: ...
+
+        await assistant.thread("u1")("Time?")
+
+        assert out.getvalue().splitlines()[-1] == "└─ ✓ 5 chars · 2.0s · first token 1.0s · 120 in, 8 out · 4.0s total"
 
     async def it_marks_tool_errors_and_shows_arguments(ticking: None):
         @tool

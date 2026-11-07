@@ -27,6 +27,7 @@ from virtus.message import (
     ToolCall,
     ToolCallDelta,
     ToolResult,
+    Usage,
     UserMessage,
 )
 from virtus.provider import Provider
@@ -68,12 +69,15 @@ class Anthropic(Provider):
             stream=True,
         )
 
+        usage: Usage | None = None
         text: list[str] = []
         calls: dict[int, tuple[str, str, list[str]]] = {}
         """Open tool_use blocks by index: id, name and the argument fragments so far."""
 
         async for event in stream:
             match event.type:
+                case "message_start":
+                    usage = Usage(event.message.usage.input_tokens, event.message.usage.output_tokens)
                 case "content_block_start" if event.content_block.type == "tool_use":
                     calls[event.index] = (event.content_block.id, event.content_block.name, [])
                 case "content_block_delta" if event.delta.type == "text_delta":
@@ -86,12 +90,15 @@ class Anthropic(Provider):
                 case "message_delta" if event.delta.stop_reason == "refusal":
                     details = event.delta.stop_details
                     raise RuntimeError(f"{self!r} refused the request: {details.explanation if details else ''}")
+                case "message_delta":
+                    usage = Usage(event.usage.input_tokens or (usage.input if usage else 0), event.usage.output_tokens)
                 case _:
                     pass
 
         yield AssistantMessage(
             "".join(text),
             tuple(ToolCall(id, name, "".join(fragments) or "{}") for _, (id, name, fragments) in sorted(calls.items())),
+            usage=usage,
         )
 
     def _output_config(self, schema: Mapping[str, object] | None) -> OutputConfigParam:

@@ -251,13 +251,16 @@ async def assistant(question: str) -> str: ...
 ```
 ▶ u1 · What time is it in Lisbon?
 ├─ OpenAI('gpt-6-luna') · 1 msg · tools: clock
-│  0.9s · first token 0.6s
+│  0.9s · first token 0.6s · 280 in, 20 out
 │  ⚙ clock(zone="Europe/Lisbon")
 │  ↳ 14:32 · 0.0s
 ├─ OpenAI('gpt-6-luna') · 3 msgs
 │  It is 14:32 in Lisbon.
-└─ ✓ 23 chars · 0.8s · first token 0.4s · 1.7s total
+└─ ✓ 23 chars · 0.8s · first token 0.4s · 310 in, 12 out · 1.7s total
 ```
+
+Every `AssistantMessage` carries the `usage` of the call that produced it, when the provider reports
+it, and `thread.usage` adds up the conversation's.
 
 ## Images and audio
 

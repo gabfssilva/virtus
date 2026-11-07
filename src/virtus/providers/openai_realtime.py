@@ -39,6 +39,7 @@ from virtus.message import (
     ToolCall,
     ToolCallDelta,
     ToolResult,
+    Usage,
 )
 from virtus.provider import Session
 from virtus.tool import Tool
@@ -75,6 +76,7 @@ class RealtimeSession(Session):
         await self._configure(system, tools)
         await self._connection.response.create()
 
+        usage: Usage | None = None
         transcript: list[str] = []
         sound: list[bytes] = []
         calls: list[ToolCall] = []
@@ -97,11 +99,14 @@ class RealtimeSession(Session):
                 case ResponseDoneEvent(response=response):
                     if response.status == "failed":
                         raise RuntimeError(f"the reply failed: {response.status_details!r}")
+                    if response.usage:
+                        usage = Usage(response.usage.input_tokens or 0, response.usage.output_tokens or 0)
                     break
                 case _:
                     pass
 
-        yield AssistantMessage("".join(transcript), tuple(calls), audio=Audio.pcm16(b"".join(sound)) if sound else None)
+        spoken = Audio.pcm16(b"".join(sound)) if sound else None
+        yield AssistantMessage("".join(transcript), tuple(calls), audio=spoken, usage=usage)
 
     async def deliver(self, result: ToolResult) -> None:
         item = RealtimeConversationItemFunctionCallOutputParam(

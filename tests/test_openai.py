@@ -6,6 +6,7 @@ from types import SimpleNamespace
 
 import pytest
 from openai import omit
+from openai.types import CompletionUsage
 from openai.types.chat import ChatCompletionChunk
 from openai.types.chat.chat_completion_chunk import (
     Choice,
@@ -26,6 +27,7 @@ from virtus import (
     ToolCall,
     ToolCallDelta,
     ToolResult,
+    Usage,
     UserMessage,
     agent,
     tool,
@@ -145,7 +147,7 @@ def describe_streaming():
             chunk(ChoiceDelta(tool_calls=[fragment(0, arguments='"Paris"}'), fragment(1, arguments="{}")])),
         ]
         provider = OpenAI(max_tokens=300, reasoning_effort="low")
-        client = Replaying(chunks, [chunk(ChoiceDelta(content="done"))])
+        client = Replaying(chunks, [chunk(ChoiceDelta(content="done")), counted(prompt=40, completion=3)])
         provider.__dict__["_client"] = client
 
         @agent(provider=provider)
@@ -154,8 +156,9 @@ def describe_streaming():
         events = [e async for e in bot("weather?")]
         first_step = events[: next(i for i, e in enumerate(events) if isinstance(e, AssistantMessage)) + 1]
 
-        assert events[-1] == AssistantMessage("done")
+        assert events[-1] == AssistantMessage("done", usage=Usage(40, 3))
         assert (client.calls[0]["max_completion_tokens"], client.calls[0]["reasoning_effort"]) == (300, "low")
+        assert client.calls[0]["stream_options"] == {"include_usage": True}
         assert first_step == [
             TextDelta("Let me check."),
             ToolCallDelta("c1", "weather", ""),
@@ -219,6 +222,14 @@ def describe_streaming():
 def chunk(delta: ChoiceDelta) -> ChatCompletionChunk:
     return ChatCompletionChunk(
         id="chunk", choices=[Choice(index=0, delta=delta)], created=0, model="test", object="chat.completion.chunk"
+    )
+
+
+def counted(*, prompt: int, completion: int) -> ChatCompletionChunk:
+    """The last chunk of a stream asked for usage: no choices, the token counts."""
+    usage = CompletionUsage(prompt_tokens=prompt, completion_tokens=completion, total_tokens=prompt + completion)
+    return ChatCompletionChunk(
+        id="chunk", choices=[], created=0, model="test", object="chat.completion.chunk", usage=usage
     )
 
 

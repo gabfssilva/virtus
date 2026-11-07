@@ -4,17 +4,20 @@ from types import SimpleNamespace
 import pytest
 from anthropic.types import (
     InputJSONDelta,
+    Message,
     MessageDeltaUsage,
     RawContentBlockDeltaEvent,
     RawContentBlockStartEvent,
     RawContentBlockStopEvent,
     RawMessageDeltaEvent,
+    RawMessageStartEvent,
     RawMessageStopEvent,
     RawMessageStreamEvent,
     TextBlock,
     ToolUseBlock,
 )
 from anthropic.types import TextDelta as AnthropicTextDelta
+from anthropic.types import Usage as AnthropicUsage
 from anthropic.types.raw_message_delta_event import Delta
 from pydantic import BaseModel
 
@@ -27,6 +30,7 @@ from virtus import (
     ToolCall,
     ToolCallDelta,
     ToolResult,
+    Usage,
     UserMessage,
     agent,
     tool,
@@ -105,6 +109,7 @@ def describe_messages():
 def describe_streaming():
     async def it_emits_deltas_and_the_assembled_message():
         first_turn: list[RawMessageStreamEvent] = [
+            started(input_tokens=12),
             start(0, TextBlock(type="text", text="")),
             delta(0, AnthropicTextDelta(type="text_delta", text="Let me check.")),
             stop(0),
@@ -143,7 +148,9 @@ def describe_streaming():
             ToolCallDelta("c1", "weather", '{"city": '),
             ToolCallDelta("c1", "weather", '"Paris"}'),
             AssistantMessage(
-                "Let me check.", (ToolCall("c1", "weather", '{"city": "Paris"}'), ToolCall("c2", "time", "{}"))
+                "Let me check.",
+                (ToolCall("c1", "weather", '{"city": "Paris"}'), ToolCall("c2", "time", "{}")),
+                usage=Usage(12, 1),
             ),
             ToolResult("c1", "weather", "sunny in Paris"),
             ToolResult("c2", "time", "Unknown tool: time", is_error=True),
@@ -196,6 +203,12 @@ def delta(index: int, content: AnthropicTextDelta | InputJSONDelta) -> RawConten
 
 def stop(index: int) -> RawContentBlockStopEvent:
     return RawContentBlockStopEvent(type="content_block_stop", index=index)
+
+
+def started(input_tokens: int) -> RawMessageStartEvent:
+    usage = AnthropicUsage(input_tokens=input_tokens, output_tokens=0)
+    message = Message(id="m", content=[], model="test", role="assistant", type="message", usage=usage)
+    return RawMessageStartEvent(type="message_start", message=message)
 
 
 class Replaying:

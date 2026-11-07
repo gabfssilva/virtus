@@ -26,6 +26,7 @@ from virtus.message import (
     Message,
     ToolCall,
     ToolResult,
+    Usage,
     UserMessage,
 )
 
@@ -146,12 +147,18 @@ class _Call(BaseModel):
     arguments: str
 
 
+class _Usage(BaseModel):
+    input: int
+    output: int
+
+
 class _Assistant(BaseModel):
     role: Literal["assistant"] = "assistant"
     content: str
     tool_calls: list[_Call] = []
     images: list[_Image] = []
     audio: _Audio | None = None
+    usage: _Usage | None = None
 
 
 class _Tool(BaseModel):
@@ -179,10 +186,11 @@ def _entry(message: Message) -> _User | _Assistant | _Tool:
     match message:
         case UserMessage(content=content, images=images, audio=audio):
             return _User(content=content, images=_images(images), audio=_clips(audio))
-        case AssistantMessage(content=content, tool_calls=calls, images=images, audio=audio):
+        case AssistantMessage(content=content, tool_calls=calls, images=images, audio=audio, usage=usage):
             tool_calls = [_Call(id=c.id, name=c.name, arguments=c.arguments) for c in calls]
             spoken = _Audio.of(audio) if audio else None
-            return _Assistant(content=content, tool_calls=tool_calls, images=_images(images), audio=spoken)
+            used = _Usage(input=usage.input, output=usage.output) if usage else None
+            return _Assistant(content=content, tool_calls=tool_calls, images=_images(images), audio=spoken, usage=used)
         case ToolResult(call_id=call_id, name=name, content=content, is_error=is_error, images=images, audio=audio):
             entry = _Tool(call_id=call_id, name=name, content=content, is_error=is_error)
             return entry.model_copy(update={"images": _images(images), "audio": _clips(audio)})
@@ -192,10 +200,11 @@ def _message(entry: _User | _Assistant | _Tool) -> Message:
     match entry:
         case _User(content=content, images=images, audio=audio):
             return UserMessage(content, tuple(i.image() for i in images), tuple(a.audio() for a in audio))
-        case _Assistant(content=content, tool_calls=calls, images=images, audio=audio):
+        case _Assistant(content=content, tool_calls=calls, images=images, audio=audio, usage=usage):
             tool_calls = tuple(ToolCall(c.id, c.name, c.arguments) for c in calls)
             spoken = audio.audio() if audio else None
-            return AssistantMessage(content, tool_calls, tuple(i.image() for i in images), spoken)
+            used = Usage(usage.input, usage.output) if usage else None
+            return AssistantMessage(content, tool_calls, tuple(i.image() for i in images), spoken, used)
         case _Tool(call_id=call_id, name=name, content=content, is_error=is_error, images=images, audio=audio):
             attached = tuple(i.image() for i in images), tuple(a.audio() for a in audio)
             return ToolResult(call_id, name, content, is_error, *attached)

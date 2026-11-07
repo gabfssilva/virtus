@@ -15,6 +15,7 @@ from virtus import (
     Request,
     ToolCall,
     ToolResult,
+    Usage,
     UserMessage,
     agent,
     on_input,
@@ -28,7 +29,7 @@ HISTORY = (
     AssistantMessage("Checking.", (ToolCall("c1", "zoom", '{"factor": 2}'),)),
     ToolResult("c1", "zoom", "[image]", images=(PICTURE,), audio=(CLIP,)),
     ToolResult("c2", "time", "boom", is_error=True),
-    AssistantMessage("A red square.", images=(PICTURE,), audio=CLIP),
+    AssistantMessage("A red square.", images=(PICTURE,), audio=CLIP, usage=Usage(120, 8)),
 )
 
 

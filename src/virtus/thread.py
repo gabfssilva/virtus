@@ -5,6 +5,7 @@ from collections.abc import AsyncIterator, Sequence
 from contextlib import asynccontextmanager
 from functools import reduce
 from itertools import count
+from operator import add
 from typing import TYPE_CHECKING, Final, Protocol, runtime_checkable
 from uuid import uuid4
 from weakref import WeakValueDictionary
@@ -21,6 +22,7 @@ from virtus.message import (
     ToolCall,
     ToolCallDelta,
     ToolResult,
+    Usage,
     UserMessage,
 )
 from virtus.middleware import Capability, Middleware, Next
@@ -93,6 +95,11 @@ class Thread[**P, R](Capability, Conversation):
     @property
     def children(self) -> Sequence[tuple[str, str]]:
         return self._journal.children(self._path)
+
+    @property
+    def usage(self) -> Usage:
+        """The tokens every provider call in this conversation consumed, as far as the provider reported them."""
+        return reduce(add, (m.usage for m in self.history if isinstance(m, AssistantMessage) and m.usage), Usage())
 
     def __call__(self, *args: P.args, **kwargs: P.kwargs) -> R:
         return self.agent.output.consume(self._stream(self.agent.input(*args, **kwargs)))

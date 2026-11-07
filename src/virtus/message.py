@@ -101,12 +101,25 @@ class ToolCall:
 
 
 @dataclass(frozen=True)
+class Usage:
+    """Tokens one provider call consumed: the prompt as `input`, the reply as `output`."""
+
+    input: int = 0
+    output: int = 0
+
+    def __add__(self, other: "Usage") -> "Usage":
+        return Usage(self.input + other.input, self.output + other.output)
+
+
+@dataclass(frozen=True)
 class AssistantMessage:
     content: str = ""
     """The text, or the transcript when the answer is spoken."""
     tool_calls: tuple[ToolCall, ...] = ()
     images: tuple[Image, ...] = ()
     audio: Audio | None = None
+    usage: Usage | None = None
+    """What the call that produced this message consumed, when the provider reports it."""
 
 
 @dataclass(frozen=True)
