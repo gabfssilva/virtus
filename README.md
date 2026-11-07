@@ -177,6 +177,15 @@ Both scale retrieval to the volume: inline while it fits, then an index plus `re
 async def support(message: str) -> str: ...
 ```
 
+`workspace(path)` gives the agent a folder it can change: `workspace_read`, `_write`, `_edit`
+(one exact occurrence), `_list` and `_search` (a regular expression over the text files). Paths are
+relative to the folder and one that resolves outside it is refused.
+
+```python
+@agent(provider=OpenAI(), capabilities=[workspace("./project")])
+async def clerk(request: str) -> str: ...
+```
+
 ## Hooks and middleware
 
 `@on_input` rewrites or rejects each new user message; `@on_message` sees every complete message.
@@ -287,7 +296,7 @@ the user talks over; `speech=` swaps the level-based detector for your own. Unde
 `19_realtime_voice.py` needs the `realtime` extra, `sounddevice` (in the dev group) for the microphone and
 speaker, and a realtime model. `20_websearch.py` and `21_observe.py` need the `websearch` extra.
 `22_academic_researcher.py` is a four-agent team over arXiv and OpenAlex, both keyless.
-`23_toolbox.py` shows the stdlib tools.
+`23_toolbox.py` and `24_workspace.py` show the stdlib tools and the workspace.
 
 ## Development
 

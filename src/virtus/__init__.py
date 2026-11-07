@@ -28,6 +28,7 @@ from virtus.provider import LiveProvider, Provider, Session
 from virtus.request import Request
 from virtus.thread import Conversation, Thread
 from virtus.tool import Tool, tool
+from virtus.workspace import workspace
 
 __all__ = [
     "Agent",
@@ -75,4 +76,5 @@ __all__ = [
     "on_input",
     "on_message",
     "tool",
+    "workspace",
 ]
