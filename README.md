@@ -6,7 +6,7 @@ A small library for building agents. Virtus allows you to describe agents as reg
 uv add virtus
 ```
 
-Python 3.12. The API is still subject to change.
+Python 3.12+, free-threaded builds included (the `pdf` extra needs `onnxruntime`, which has no 3.15 wheel yet). The API is still subject to change.
 
 ## Start with a function
 
