@@ -13,7 +13,7 @@ from pathlib import Path
 import httpx2 as httpx
 
 from virtus import Capabilities, agent, tool
-from virtus.providers import OpenAI
+from virtus.providers import ChatCompletions
 
 OPERATORS: dict[type[ast.operator] | type[ast.unaryop], Callable[..., float]] = {
     ast.Add: operator.add,
@@ -85,16 +85,14 @@ async def wikipedia(query: str, limit: int = 3) -> list[dict[str, str]]:
             headers={"User-Agent": "virtus-example/0.1"},
         )
         response.raise_for_status()
-    return [
-        {"title": page["title"], "description": page.get("description") or ""} for page in response.json()["pages"]
-    ]
+    return [{"title": page["title"], "description": page.get("description") or ""} for page in response.json()["pages"]]
 
 
 async def main() -> None:
     with tempfile.TemporaryDirectory() as folder:
         files = Files(Path(folder))
 
-        @agent(provider=OpenAI(), capabilities=[calculator, files, wikipedia])
+        @agent(provider=ChatCompletions(), capabilities=[calculator, files, wikipedia])
         async def assistant(task: str) -> str: ...
 
         print(await assistant("What is (17 * 23) ** 2 / 7? Use the calculator."))

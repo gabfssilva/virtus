@@ -193,7 +193,6 @@ def describe_agent_thread():
         assert provider.requests[1].messages == (UserMessage("second"),)
 
 
-
 def describe_dispatch():
     async def it_makes_one_off_requests_without_a_conversation_name():
         research = Scripted(AssistantMessage("bees dance"), AssistantMessage("wasps sting"))
@@ -289,9 +288,7 @@ def describe_dispatch():
 
         assert [t.name for t in lead_provider.requests[0].tools] == ["dispatch"]
         assert lead_provider.requests[0].system == (
-            "Lead.\n\nAgents you can `dispatch` to:\n"
-            "- researcher: Research {topic}\n"
-            "- writer: Write about {topic}"
+            "Lead.\n\nAgents you can `dispatch` to:\n- researcher: Research {topic}\n- writer: Write about {topic}"
         )
         [dispatch] = lead_provider.requests[0].tools
         topic = {"properties": {"topic": {"title": "Topic", "type": "string"}}, "required": ["topic"], "type": "object"}

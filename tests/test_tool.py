@@ -5,7 +5,7 @@ import pytest
 from pydantic import Field
 
 from tests.scripted import Scripted, calls
-from virtus import AssistantMessage, Audio, Image, ToolCall, ToolResult, agent, tool
+from virtus import AssistantMessage, Audio, File, Image, ToolCall, ToolResult, agent, tool
 
 
 def describe_tool():
@@ -78,6 +78,17 @@ def describe_tool():
             )
             assert await both.execute(ToolCall("2", "both", "{}")) == ToolResult(
                 "2", "both", '["[audio]","[image]","notes"]', images=(picture,), audio=(clip,)
+            )
+
+        async def it_attaches_returned_files():
+            paper = File(b"%PDF", name="paper.pdf")
+
+            @tool
+            def fetch() -> list[File | str]:
+                return [paper, "Pages 1-2 of 2."]
+
+            assert await fetch.execute(ToolCall("1", "fetch", "{}")) == ToolResult(
+                "1", "fetch", '["[file]","Pages 1-2 of 2."]', files=(paper,)
             )
 
         async def it_reports_failures_as_error_results():

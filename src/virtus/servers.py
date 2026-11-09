@@ -46,11 +46,14 @@ class Http:
     """A server reached over streamable HTTP; `headers` go on every request.
 
     `auth` is any `httpx2.Auth`, such as the SDK's `OAuthClientProvider` for a server behind OAuth.
+    `timeout` is in seconds, `read_timeout` longer by default because a reply may be a long-lived stream.
     """
 
     url: str
     headers: Mapping[str, str] = field(default_factory=dict)
     auth: httpx2.Auth | None = None
+    timeout: float = 30
+    read_timeout: float = 300
 
 
 @asynccontextmanager
@@ -70,8 +73,8 @@ async def mcp(**servers: Stdio | Http | str) -> AsyncIterator["Served"]:
                     program, *args = shlex.split(command)
                     parameters = StdioServerParameters(command=program, args=args, env=dict(env), cwd=cwd)
                     read, write = await stack.enter_async_context(stdio_client(parameters))
-                case Http(url, headers, auth):
-                    timeout = httpx2.Timeout(30, read=300)  # the SDK's defaults: a reply may be a long-lived stream
+                case Http(url, headers, auth, seconds, read_seconds):
+                    timeout = httpx2.Timeout(seconds, read=read_seconds)
                     http = httpx2.AsyncClient(headers=dict(headers), timeout=timeout, auth=auth)
                     client = await stack.enter_async_context(http)
                     read, write = await stack.enter_async_context(streamable_http_client(url, http_client=client))

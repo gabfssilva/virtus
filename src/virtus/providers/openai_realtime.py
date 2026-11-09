@@ -1,4 +1,4 @@
-"""The Realtime API over WebSocket, for `OpenAI.connect`; needs the `realtime` extra (`websockets`).
+"""The Realtime API over WebSocket, for `ChatCompletions.connect`; needs the `realtime` extra (`websockets`).
 
 The protocol is OpenAI's; oMLX serves the same subset locally. Turns are closed by the client: the
 server never detects speech here, so `turn_detection` is sent as null and the thread commits each turn.
@@ -40,6 +40,7 @@ from virtus.message import (
     ToolCallDelta,
     ToolResult,
     Usage,
+    transcribed,
 )
 from virtus.provider import Session
 from virtus.tool import Tool
@@ -110,7 +111,7 @@ class RealtimeSession(Session):
 
     async def deliver(self, result: ToolResult) -> None:
         item = RealtimeConversationItemFunctionCallOutputParam(
-            type="function_call_output", call_id=result.call_id, output=result.content
+            type="function_call_output", call_id=result.call_id, output=transcribed(result.content, result.files)
         )
         await self._connection.conversation.item.create(item=item)
 

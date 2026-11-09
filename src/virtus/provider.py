@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator, Sequence
 from contextlib import AbstractAsyncContextManager
-from typing import TYPE_CHECKING, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Literal, Protocol, runtime_checkable
 
 from virtus.message import AssistantMessage, Delta, Image, ToolResult
 from virtus.request import Request
@@ -15,6 +15,16 @@ if TYPE_CHECKING:
 class Provider(Protocol):
     def complete(self, request: Request) -> AsyncIterator[Delta | AssistantMessage]:
         """Stream the reply as text and tool call deltas, ending with exactly one complete `AssistantMessage`."""
+        ...
+
+
+type Kind = Literal["query", "document"]
+
+
+@runtime_checkable
+class Embedder(Protocol):
+    async def embed(self, texts: Sequence[str], kind: Kind) -> list[list[float]]:
+        """One vector per text, in order; `kind` says whether the texts are queries or the documents they look for."""
         ...
 
 

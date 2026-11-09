@@ -1,25 +1,31 @@
 import json
 from html.parser import HTMLParser
 
-from virtus.tool import tool
-from virtus.tools import net
+from virtus.tool import Tool, tool
+from virtus.tools.net import Net, clip
 
 
-@tool
-def http(
-    url: str,
-    method: str = "GET",
-    headers: dict[str, str] | None = None,
-    body: str | None = None,
-    max_chars: int = 20_000,
-) -> str:
-    """Make an HTTP request. Returns the status, the main headers and the body as text: JSON reindented,
-    HTML reduced to its readable text, other binary content described by type and size. Error statuses
-    come back the same way, not as failures."""
-    response = net.request(url, method=method.upper(), headers=headers, body=None if body is None else body.encode())
-    kind = response.headers.get("content-type", "")
-    shown = (f"{name}: {response.headers[name]}" for name in ("content-type", "location") if name in response.headers)
-    return "\n".join((f"HTTP {response.status}", *shown, "", _clip(_render(response.body, kind), max_chars)))
+def http(*, net: Net = Net(), max_chars: int = 20_000) -> Tool:
+    """The `http` tool, through `net`; `max_chars` is how much of a body it returns unless the model asks for more."""
+
+    def http(
+        url: str,
+        method: str = "GET",
+        headers: dict[str, str] | None = None,
+        body: str | None = None,
+        max_chars: int = max_chars,
+    ) -> str:
+        """Make an HTTP request. Returns the status, the main headers and the body as text: JSON reindented,
+        HTML reduced to its readable text, other binary content described by type and size. Error statuses
+        come back the same way, not as failures."""
+        encoded = None if body is None else body.encode()
+        response = net.request(url, method=method.upper(), headers=headers, body=encoded)
+        kind = response.headers.get("content-type", "")
+        names = ("content-type", "location")
+        shown = (f"{name}: {response.headers[name]}" for name in names if name in response.headers)
+        return "\n".join((f"HTTP {response.status}", *shown, "", clip(_render(response.body, kind), max_chars)))
+
+    return tool(http)
 
 
 def _render(body: bytes, kind: str) -> str:
@@ -37,10 +43,6 @@ def _render(body: bytes, kind: str) -> str:
     if media.startswith("text/") or media in {"application/xml", "application/javascript"} or not media:
         return body.decode(charset, errors="replace")
     return f"[{media}, {len(body)} bytes]"
-
-
-def _clip(text: str, max_chars: int) -> str:
-    return text if len(text) <= max_chars else f"{text[:max_chars]}\n… [truncated; {len(text)} chars in total]"
 
 
 class _Text(HTMLParser):

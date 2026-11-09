@@ -1,6 +1,7 @@
 from base64 import b64decode, b64encode
 from collections.abc import AsyncIterator, Iterator, Mapping, Sequence
 from contextlib import asynccontextmanager
+from dataclasses import replace
 from functools import cached_property
 from itertools import groupby
 from typing import Literal
@@ -21,6 +22,8 @@ from openai.types.chat import (
     ChatCompletionUserMessageParam,
 )
 from openai.types.chat.chat_completion_chunk import ChoiceDelta, ChoiceDeltaToolCall
+from openai.types.chat.chat_completion_content_part_param import File as FilePart
+from openai.types.chat.chat_completion_content_part_param import FileFile
 from openai.types.chat.chat_completion_message_function_tool_call_param import Function
 from openai.types.chat.completion_create_params import ResponseFormat
 from openai.types.shared.reasoning_effort import ReasoningEffort
@@ -31,6 +34,7 @@ from virtus.message import (
     Audio,
     AudioDelta,
     Delta,
+    File,
     Image,
     Message,
     TextDelta,
@@ -39,18 +43,20 @@ from virtus.message import (
     ToolResult,
     Usage,
     UserMessage,
+    transcribed,
 )
 from virtus.provider import LiveProvider, Provider, Session
 from virtus.request import Request
 from virtus.tool import Tool
 
 
-class OpenAI(Provider, LiveProvider):
+class ChatCompletions(Provider, LiveProvider):
     """Chat Completions API; `base_url` also covers compatible servers (OpenRouter, DeepSeek, Ollama, oMLX).
 
     Options left `None` are not sent, so the server's defaults apply. `reasoning_effort` only
     applies to reasoning models. `voice` speaks when the agent's answer is `Audio`, which only audio
     models accept; audio in the input needs one too. Spoken answers come back as 24 kHz mono WAV.
+    `files=False` sends a `File`'s text instead of the file, for servers whose models read no PDFs.
     With a realtime model, `connect` opens the Realtime API for `Thread.live`.
     """
 
@@ -60,25 +66,32 @@ class OpenAI(Provider, LiveProvider):
         *,
         api_key: str | None = None,
         base_url: str | None = None,
+        timeout: float = 600,
+        max_retries: int = 2,
         temperature: float | None = None,
         max_tokens: int | None = None,
         reasoning_effort: ReasoningEffort = None,
         voice: str | None = None,
+        files: bool = True,
     ) -> None:
         self.model = model
+        self.files = files
         self.temperature = temperature
         self.max_tokens = max_tokens
         self.reasoning_effort = reasoning_effort
         self.voice = voice
         self._api_key = api_key
         self._base_url = base_url
+        self._timeout = timeout
+        self._max_retries = max_retries
 
     async def complete(self, request: Request) -> AsyncIterator[Delta | AssistantMessage]:
         wants_audio = "audio" in request.media
         stream = await self._client.chat.completions.create(
             model=self.model,
-            messages=_messages(request.system, request.messages),
-            tools=[_tool(t) for t in request.tools] or omit,
+            messages=_messages(request.system, request.messages, files=self.files),
+            # Chat Completions has no deferred loading: a deferred tool is sent once a result has loaded it.
+            tools=[_tool(t) for t in (*request.tools, *request.loaded)] or omit,
             response_format=_response_format(request.output) if request.output else omit,
             temperature=omit if self.temperature is None else self.temperature,
             max_completion_tokens=omit if self.max_tokens is None else self.max_tokens,
@@ -140,26 +153,38 @@ class OpenAI(Provider, LiveProvider):
     @cached_property
     def _client(self) -> AsyncOpenAI:
         """Created on first use, so building an agent doesn't require credentials."""
-        return AsyncOpenAI(api_key=self._api_key, base_url=self._base_url)
+        return AsyncOpenAI(
+            api_key=self._api_key, base_url=self._base_url, timeout=self._timeout, max_retries=self._max_retries
+        )
 
     def __repr__(self) -> str:
-        return f"OpenAI({self.model!r})"
+        return f"ChatCompletions({self.model!r})"
 
 
-def _messages(system: str, history: Sequence[Message]) -> list[ChatCompletionMessageParam]:
+def _messages(system: str, history: Sequence[Message], *, files: bool = True) -> list[ChatCompletionMessageParam]:
     """A `tool` message carries text only, so media returned by a run of tool calls follows it as a user message.
 
     A spoken answer goes back as its transcript, and an answer's images are not sent back at all: the
-    API has no place for either in an assistant message.
+    API has no place for either in an assistant message. Without `files`, a file goes as its text.
     """
+
+    def readable(message: Message) -> Message:
+        match message:
+            case UserMessage(content=content, files=attached) | ToolResult(content=content, files=attached) if (
+                attached and not files
+            ):
+                return replace(message, content=transcribed(content, attached), files=())
+            case _:
+                return message
 
     def convert(message: Message) -> ChatCompletionMessageParam:
         match message:
-            case UserMessage(content=content, images=(), audio=()):
+            case UserMessage(content=content, images=(), audio=(), files=()):
                 return ChatCompletionUserMessageParam(role="user", content=content)
-            case UserMessage(content=content, images=images, audio=audio):
+            case UserMessage(content=content, images=images, audio=audio, files=attached):
                 text = ChatCompletionContentPartTextParam(type="text", text=content)
-                return ChatCompletionUserMessageParam(role="user", content=[text, *_media(images, audio)])
+                media = _media(images, audio, attached)
+                return ChatCompletionUserMessageParam(role="user", content=[text, *media])
             case AssistantMessage(content=content, tool_calls=()):
                 return ChatCompletionAssistantMessageParam(role="assistant", content=content)
             case AssistantMessage(content=content, tool_calls=calls):
@@ -177,22 +202,30 @@ def _messages(system: str, history: Sequence[Message]) -> list[ChatCompletionMes
                 return ChatCompletionToolMessageParam(role="tool", tool_call_id=call_id, content=content)
 
     def grouped() -> Iterator[ChatCompletionMessageParam]:
-        for are_results, group in groupby(history, key=lambda m: isinstance(m, ToolResult)):
+        for are_results, group in groupby(map(readable, history), key=lambda m: isinstance(m, ToolResult)):
             messages = list(group)
             yield from map(convert, messages)
             results = [m for m in messages if isinstance(m, ToolResult)]
             images = [i for m in results for i in m.images]
             audio = [a for m in results for a in m.audio]
-            if are_results and (images or audio):
+            attached = [f for m in results for f in m.files]
+            if are_results and (images or audio or attached):
                 note = ChatCompletionContentPartTextParam(type="text", text="Media returned by the tool calls above.")
-                yield ChatCompletionUserMessageParam(role="user", content=[note, *_media(images, audio)])
+                yield ChatCompletionUserMessageParam(role="user", content=[note, *_media(images, audio, attached)])
 
     prompt = [ChatCompletionSystemMessageParam(role="system", content=system)] if system else []
     return [*prompt, *grouped()]
 
 
-def _media(images: Sequence[Image], audio: Sequence[Audio]) -> list[ChatCompletionContentPartParam]:
-    return [*map(_image, images), *map(_audio, audio)]
+def _media(
+    images: Sequence[Image], audio: Sequence[Audio], files: Sequence[File]
+) -> list[ChatCompletionContentPartParam]:
+    return [*map(_image, images), *map(_audio, audio), *map(_file, files)]
+
+
+def _file(file: File) -> FilePart:
+    data = f"data:{file.media_type};base64,{b64encode(file.data).decode()}"
+    return FilePart(type="file", file=FileFile(file_data=data, filename=file.name))
 
 
 def _image(image: Image) -> ChatCompletionContentPartImageParam:

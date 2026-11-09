@@ -1,20 +1,20 @@
-"""`lazy(...)` offers tools on demand: the model sees a one-line catalog and loads what it needs with
-`load_tools`, so a big toolbox doesn't travel with every request. Anything that goes in `capabilities=` goes in."""
+"""`lazy(...)` offers tools on demand: the model sees the tool names and finds what it needs with `tool_search`,
+so a big toolbox doesn't travel with every request. Anything that goes in `capabilities=` goes in."""
 
 import asyncio
 
 from virtus import agent, lazy, observe
-from virtus.providers import OpenAI
+from virtus.providers import Responses
 from virtus.tools import arxiv, calculator, http, openalex, wikipedia
 
-# Chat Completions only takes function tools from gpt-6 with reasoning off; the Responses API has no such limit.
-model = OpenAI(reasoning_effort="none")
+# The Responses API loads the tools a search finds natively; Chat Completions would add them to the request.
+model = Responses()
 
 
 @agent(
     provider=model,
     system="Load only the tools the question needs, then answer in one sentence.",
-    capabilities=[lazy(wikipedia, calculator, http, arxiv, openalex), observe()],
+    capabilities=[lazy(wikipedia(), calculator(), http(), arxiv(), openalex()), observe()],
 )
 async def assistant(question: str) -> str: ...
 

@@ -1,6 +1,6 @@
 import pytest
 
-from virtus.providers import OpenAI, omlx, openrouter
+from virtus.providers import ChatCompletions, omlx, openrouter
 
 
 def describe_provider_factories():
@@ -9,7 +9,7 @@ def describe_provider_factories():
 
         provider = openrouter("openai/gpt-audio-mini", voice="echo", temperature=0)
 
-        assert isinstance(provider, OpenAI)
+        assert isinstance(provider, ChatCompletions)
         assert (provider.model, provider.voice, provider.temperature) == ("openai/gpt-audio-mini", "echo", 0)
         assert str(provider._client.base_url) == "https://openrouter.ai/api/v1/"
         assert provider._client.api_key == "or-key"

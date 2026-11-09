@@ -8,7 +8,7 @@ from typing import get_type_hints
 from pydantic import BaseModel, create_model
 from pydantic_core import to_json
 
-from virtus.message import Audio, Event, Image, ToolCall, ToolResult, placeholder
+from virtus.message import Audio, Event, File, Image, ToolCall, ToolResult, placeholder
 from virtus.middleware import Capability, Middleware, Next
 from virtus.request import Request
 
@@ -37,8 +37,8 @@ class Tool(Capability):
     async def execute(self, call: ToolCall) -> ToolResult:
         """Run the tool; any failure becomes an error result so the model can react to it.
 
-        A returned `Image` or `Audio`, alone or in a sequence, is attached to the result and reads as
-        `[image]` or `[audio]` in its text.
+        A returned `Image`, `Audio` or `File`, alone or in a sequence, is attached to the result and reads
+        as `[image]`, `[audio]` or `[file]` in its text.
         """
         try:
             arguments = dict(self.parameters.model_validate_json(call.arguments or "{}"))
@@ -46,15 +46,16 @@ class Tool(Capability):
         except Exception as error:
             return ToolResult(call.id, call.name, f"{type(error).__name__}: {error}", is_error=True)
 
-        images, audio = Image.found_in(value), Audio.found_in(value)
+        images, audio, files = Image.found_in(value), Audio.found_in(value), File.found_in(value)
         match value:
             case str():
                 return ToolResult(call.id, call.name, value)
-            case Image() | Audio():
-                return ToolResult(call.id, call.name, placeholder(value) or "", images=images, audio=audio)
-            case Sequence() if images or audio:
+            case Image() | Audio() | File():
+                text = placeholder(value) or ""
+                return ToolResult(call.id, call.name, text, images=images, audio=audio, files=files)
+            case Sequence() if images or audio or files:
                 text = to_json([placeholder(v) or v for v in value]).decode()
-                return ToolResult(call.id, call.name, text, images=images, audio=audio)
+                return ToolResult(call.id, call.name, text, images=images, audio=audio, files=files)
             case _:
                 return ToolResult(call.id, call.name, to_json(value).decode())
 

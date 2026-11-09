@@ -49,10 +49,12 @@ class Fetch:
     def __init__(self, *answers: bytes | Exception) -> None:
         self.answers = list(answers)
         self.urls: list[str] = []
+        self.requests: list[Request] = []
 
     @contextmanager
     def __call__(self, request: Request, timeout: float):
         self.urls.append(request.full_url)
+        self.requests.append(request)
         answer = self.answers.pop(0)
         if isinstance(answer, Exception):
             raise answer
@@ -64,7 +66,7 @@ def describe_arxiv():
         fetch = Fetch(FEED)
         monkeypatch.setattr(net, "urlopen", fetch)
 
-        result = await arxiv.execute(ToolCall("1", "arxiv", '{"query": "LLM imputation", "count": 2}'))
+        result = await arxiv().execute(ToolCall("1", "arxiv", '{"query": "LLM imputation", "count": 2}'))
 
         assert fetch.urls == [
             "https://export.arxiv.org/api/query?search_query=all%3ALLM+AND+all%3Aimputation&max_results=2&sortBy=relevance"
@@ -86,17 +88,31 @@ def describe_arxiv():
         monkeypatch.setattr(net, "urlopen", fetch)
         monkeypatch.setattr(net.time, "sleep", paused.append)
 
-        result = await arxiv.execute(ToolCall("1", "arxiv", '{"query": "LLM"}'))
+        result = await arxiv().execute(ToolCall("1", "arxiv", '{"query": "LLM"}'))
 
         assert len(fetch.urls) == 2
         assert paused == [3]
         assert not result.is_error
 
+    async def it_takes_the_retries_pause_and_user_agent(monkeypatch: pytest.MonkeyPatch):
+        limited = HTTPError("u", 429, "Too Many Requests", Message(), None)
+        fetch = Fetch(limited, limited, FEED)
+        paused: list[float] = []
+        monkeypatch.setattr(net, "urlopen", fetch)
+        monkeypatch.setattr(net.time, "sleep", paused.append)
+
+        result = await arxiv(net=net.Net(agent="me", retries=2, pause=0.5)).execute(
+            ToolCall("1", "arxiv", '{"query": "LLM"}')
+        )
+
+        assert (paused, result.is_error) == ([0.5, 0.5], False)
+        assert fetch.requests[0].get_header("User-agent") == "me"
+
     async def it_gives_up_on_other_errors(monkeypatch: pytest.MonkeyPatch):
         fetch = Fetch(HTTPError("u", 500, "Server Error", Message(), None))
         monkeypatch.setattr(net, "urlopen", fetch)
 
-        result = await arxiv.execute(ToolCall("1", "arxiv", '{"query": "LLM"}'))
+        result = await arxiv().execute(ToolCall("1", "arxiv", '{"query": "LLM"}'))
 
         assert result.is_error
         assert "500" in result.content
@@ -108,20 +124,23 @@ def describe_openalex():
         monkeypatch.setattr(net, "urlopen", fetch)
         monkeypatch.setenv("OPENALEX_API_KEY", "oa-key")
 
-        result = await openalex.execute(ToolCall("1", "openalex", '{"query": "LLM imputation"}'))
+        result = await openalex().execute(ToolCall("1", "openalex", '{"query": "LLM imputation"}'))
 
         [url] = fetch.urls
         assert url.startswith("https://api.openalex.org/works?search=LLM+imputation&per-page=5&select=")
         assert url.endswith("&api_key=oa-key")
         first, second = json.loads(result.content)
-        assert first == Paper(
-            title="FILLM",
-            authors=["Subham Jha"],
-            year=2025,
-            url="https://doi.org/10.1/x",
-            citations=3,
-            summary="LLM imputation works",
-        ).model_dump()
+        assert (
+            first
+            == Paper(
+                title="FILLM",
+                authors=["Subham Jha"],
+                year=2025,
+                url="https://doi.org/10.1/x",
+                citations=3,
+                summary="LLM imputation works",
+            ).model_dump()
+        )
         assert (second["title"], second["url"]) == ("(untitled)", "https://openalex.org/W2")
         assert second["summary"] == "(no abstract)"
 
@@ -130,7 +149,7 @@ def describe_openalex():
         monkeypatch.setattr(net, "urlopen", fetch)
         monkeypatch.delenv("OPENALEX_API_KEY", raising=False)
 
-        result = await openalex.execute(ToolCall("1", "openalex", '{"query": "x"}'))
+        result = await openalex().execute(ToolCall("1", "openalex", '{"query": "x"}'))
 
         assert "api_key" not in fetch.urls[0]
         assert result.content == "[]"

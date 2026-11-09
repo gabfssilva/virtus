@@ -39,6 +39,21 @@ def describe_compaction():
         assert answer_request.messages == (SUMMARY, UserMessage("What should I drink?"))
         assert thread.history == (SUMMARY, UserMessage("What should I drink?"), AssistantMessage("Tea it is"))
 
+    async def it_takes_the_summarizer_its_prompt_and_the_header():
+        summarizer = Scripted(AssistantMessage("Ana likes tea"))
+        provider = Scripted(AssistantMessage("noted"), AssistantMessage("Tea it is"))
+        settings = {"provider": summarizer, "prompt": "Summarize.", "header": "Earlier:", "chars_per_token": 1}
+
+        @agent(provider=provider, capabilities=[compaction(max_tokens=30, keep=1, **settings)])
+        async def chat(message: str) -> str: ...
+
+        thread = chat.thread()
+        await thread("I'm Ana and I like tea")
+        await thread("What should I drink?")
+
+        assert summarizer.requests[0].system == "Summarize."
+        assert provider.requests[1].messages[0] == UserMessage("Earlier:\n\nAna likes tea")
+
     async def it_never_separates_a_tool_result_from_its_call():
         @tool
         def lookup() -> str:

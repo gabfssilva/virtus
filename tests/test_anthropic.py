@@ -25,6 +25,7 @@ from virtus import (
     AssistantMessage,
     Audio,
     Event,
+    File,
     Image,
     TextDelta,
     ToolCall,
@@ -33,10 +34,12 @@ from virtus import (
     Usage,
     UserMessage,
     agent,
+    lazy,
     tool,
 )
+from virtus.lazy import Search
 from virtus.providers import Anthropic
-from virtus.providers.anthropic import _messages
+from virtus.providers.anthropic import _messages, _tool
 
 
 def describe_messages():
@@ -82,6 +85,30 @@ def describe_messages():
             }
         ]
 
+    def it_sends_files_as_document_blocks_in_messages_and_tool_results():
+        paper = File(b"%PDF", name="paper.pdf", text="Abstract")
+        document = {
+            "type": "document",
+            "source": {"type": "base64", "media_type": "application/pdf", "data": "JVBERg=="},
+            "title": "paper.pdf",
+        }
+        history = (UserMessage("Summarize [file]", files=(paper,)), ToolResult("c1", "pdf", "[file]", files=(paper,)))
+
+        assert _messages(history) == [
+            {"role": "user", "content": [document, {"type": "text", "text": "Summarize [file]"}]},
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": "c1",
+                        "is_error": False,
+                        "content": [{"type": "text", "text": "[file]"}, document],
+                    }
+                ],
+            },
+        ]
+
     def it_sends_tool_result_images_as_blocks_inside_the_result():
         history = (ToolResult("c1", "snapshot", "[image]", images=(Image(b"\x89PNG", "image/png"),)),)
 
@@ -105,8 +132,82 @@ def describe_messages():
             }
         ]
 
+    def it_sends_the_tools_a_result_loads_as_tool_references():
+        history = (ToolResult("c1", "tool_search", "Loaded", tools=("weather", "time")),)
+
+        assert _messages(history) == [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": "c1",
+                        "content": [
+                            {"type": "text", "text": "Loaded"},
+                            {"type": "tool_reference", "tool_name": "weather"},
+                            {"type": "tool_reference", "tool_name": "time"},
+                        ],
+                        "is_error": False,
+                    }
+                ],
+            }
+        ]
+
 
 def describe_streaming():
+    async def it_defers_lazy_tools_and_lets_the_api_load_them():
+        first_turn: list[RawMessageStreamEvent] = [
+            start(0, ToolUseBlock(type="tool_use", id="c1", name="tool_search", input={})),
+            delta(0, InputJSONDelta(type="input_json_delta", partial_json='{"query": "weather"}')),
+            stop(0),
+            RawMessageStopEvent(type="message_stop"),
+        ]
+        second_turn: list[RawMessageStreamEvent] = [
+            start(0, TextBlock(type="text", text="")),
+            delta(0, AnthropicTextDelta(type="text_delta", text="done")),
+            stop(0),
+            RawMessageStopEvent(type="message_stop"),
+        ]
+        provider = Anthropic()
+        client = Replaying(first_turn, second_turn)
+        provider.__dict__["_client"] = client
+
+        @tool
+        def weather(city: str) -> str:
+            """Weather in a city."""
+            return f"sunny in {city}"
+
+        @agent(provider=provider, capabilities=[lazy(weather)])
+        async def bot(message: str) -> str: ...
+
+        assert await bot("weather?") == "done"
+
+        loaded = "Loaded, usable from your next step on:\n- weather: Weather in a city."
+        tools = [_tool(Search.over((weather,))), _tool(weather, deferred=True)]
+        assert tools[1]["defer_loading"] is True
+        assert (client.calls[0]["tools"], client.calls[1]["tools"]) == (tools, tools)
+        assert client.calls[1]["messages"] == [
+            {"role": "user", "content": "weather?"},
+            {
+                "role": "assistant",
+                "content": [{"type": "tool_use", "id": "c1", "name": "tool_search", "input": {"query": "weather"}}],
+            },
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": "c1",
+                        "content": [
+                            {"type": "text", "text": loaded},
+                            {"type": "tool_reference", "tool_name": "weather"},
+                        ],
+                        "is_error": False,
+                    }
+                ],
+            },
+        ]
+
     async def it_emits_deltas_and_the_assembled_message():
         first_turn: list[RawMessageStreamEvent] = [
             started(input_tokens=12),

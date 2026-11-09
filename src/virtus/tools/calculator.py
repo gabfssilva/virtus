@@ -3,19 +3,7 @@ import math
 import operator
 from collections.abc import Callable, Mapping
 
-from virtus.tool import tool
-
-
-@tool
-def calculator(expression: str) -> str:
-    """Evaluate an arithmetic expression exactly: numbers, + - * / // % **, parentheses, the functions
-    sqrt, exp, log, log2, log10, sin, cos, tan, asin, acos, atan, atan2, sinh, cosh, tanh, floor, ceil,
-    abs, round, min, max, factorial, gcd, hypot, degrees, radians, and the constants pi, e, tau."""
-    value = _evaluate(ast.parse(expression.strip(), mode="eval").body)
-    if isinstance(value, float) and value.is_integer() and abs(value) < 2**53:
-        return str(int(value))
-    return str(value)
-
+from virtus.tool import Tool, tool
 
 type Number = int | float
 
@@ -61,36 +49,56 @@ FUNCTIONS: Mapping[str, Callable[..., object]] = {
 CONSTANTS: Mapping[str, float] = {"pi": math.pi, "e": math.e, "tau": math.tau}
 
 
-def _evaluate(node: ast.expr) -> Number:
-    match node:
-        case ast.Constant(value=bool()):
-            raise ValueError("booleans are not numbers")
-        case ast.Constant(value=int() | float() as value):
-            return value
-        case ast.UnaryOp(op=ast.USub(), operand=operand):
-            return -_evaluate(operand)
-        case ast.UnaryOp(op=ast.UAdd(), operand=operand):
-            return _evaluate(operand)
-        case ast.BinOp(left=left, op=ast.Pow(), right=right):
-            return _power(_evaluate(left), _evaluate(right))
-        case ast.BinOp(left=left, op=op, right=right) if type(op) in OPERATORS:
-            return OPERATORS[type(op)](_evaluate(left), _evaluate(right))
-        case ast.Name(id=name) if name in CONSTANTS:
-            return CONSTANTS[name]
-        case ast.Call(func=ast.Name(id=name), args=args, keywords=[]) if name in FUNCTIONS:
-            return _number(FUNCTIONS[name](*(_evaluate(a) for a in args)))
-        case ast.Name(id=name) | ast.Call(func=ast.Name(id=name)):
-            raise ValueError(f"unknown name {name!r}")
-        case _:
-            raise ValueError(f"unsupported syntax: {type(node).__name__}")
+def calculator(
+    *,
+    functions: Mapping[str, Callable[..., object]] = FUNCTIONS,
+    constants: Mapping[str, float] = CONSTANTS,
+    max_exponent: int = 10_000,
+    max_bits: int = 1_000_000,
+) -> Tool:
+    """The `calculator` tool over `functions` and `constants`. A power is refused past `max_exponent`, or when
+    an integer result would take more than `max_bits`, so an expression cannot stall the event loop."""
 
+    def evaluate(node: ast.expr) -> Number:
+        match node:
+            case ast.Constant(value=bool()):
+                raise ValueError("booleans are not numbers")
+            case ast.Constant(value=int() | float() as value):
+                return value
+            case ast.UnaryOp(op=ast.USub(), operand=operand):
+                return -evaluate(operand)
+            case ast.UnaryOp(op=ast.UAdd(), operand=operand):
+                return evaluate(operand)
+            case ast.BinOp(left=left, op=ast.Pow(), right=right):
+                return power(evaluate(left), evaluate(right))
+            case ast.BinOp(left=left, op=op, right=right) if type(op) in OPERATORS:
+                return OPERATORS[type(op)](evaluate(left), evaluate(right))
+            case ast.Name(id=name) if name in constants:
+                return constants[name]
+            case ast.Call(func=ast.Name(id=name), args=args, keywords=[]) if name in functions:
+                return _number(functions[name](*(evaluate(a) for a in args)))
+            case ast.Name(id=name) | ast.Call(func=ast.Name(id=name)):
+                raise ValueError(f"unknown name {name!r}")
+            case _:
+                raise ValueError(f"unsupported syntax: {type(node).__name__}")
 
-def _power(base: Number, exponent: Number) -> Number:
-    """Bounded so that an expression cannot stall the event loop computing a number with millions of digits."""
-    huge = isinstance(base, int) and isinstance(exponent, int) and base.bit_length() * exponent > 1_000_000
-    if abs(exponent) > 10_000 or huge:
-        raise ValueError("exponent too large")
-    return operator.pow(base, exponent)
+    def power(base: Number, exponent: Number) -> Number:
+        huge = isinstance(base, int) and isinstance(exponent, int) and base.bit_length() * exponent > max_bits
+        if abs(exponent) > max_exponent or huge:
+            raise ValueError("exponent too large")
+        return operator.pow(base, exponent)
+
+    def calculator(expression: str) -> str:
+        value = evaluate(ast.parse(expression.strip(), mode="eval").body)
+        if isinstance(value, float) and value.is_integer() and abs(value) < 2**53:
+            return str(int(value))
+        return str(value)
+
+    description = (
+        "Evaluate an arithmetic expression exactly: numbers, + - * / // % **, parentheses, the functions "
+        f"{', '.join(functions)}, and the constants {', '.join(constants)}."
+    )
+    return tool(calculator, description=description)
 
 
 def _number(value: object) -> Number:

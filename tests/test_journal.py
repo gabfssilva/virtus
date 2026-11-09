@@ -8,6 +8,7 @@ from virtus import (
     AssistantMessage,
     Audio,
     Delta,
+    File,
     Image,
     JsonJournal,
     MemoryJournal,
@@ -24,11 +25,13 @@ from virtus import (
 
 PICTURE = Image(b"\x89PNG", "image/png")
 CLIP = Audio(b"RIFF", "audio/wav")
+PAPER = File(b"%PDF", name="paper.pdf", text="Abstract")
 HISTORY = (
-    UserMessage("What is this?", (PICTURE,), (CLIP,)),
+    UserMessage("What is this?", (PICTURE,), (CLIP,), (PAPER, File(b"%PDF"))),
     AssistantMessage("Checking.", (ToolCall("c1", "zoom", '{"factor": 2}'),)),
-    ToolResult("c1", "zoom", "[image]", images=(PICTURE,), audio=(CLIP,)),
+    ToolResult("c1", "zoom", "[image]", images=(PICTURE,), audio=(CLIP,), files=(PAPER,)),
     ToolResult("c2", "time", "boom", is_error=True),
+    ToolResult("c3", "tool_search", "Loaded zoom", tools=("zoom",)),
     AssistantMessage("A red square.", images=(PICTURE,), audio=CLIP, usage=Usage(120, 8)),
 )
 

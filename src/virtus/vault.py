@@ -17,23 +17,26 @@ from virtus.tool import Tool
 
 PLACEHOLDER = re.compile(r"\{\{\s*secrets\.([A-Za-z_][\w-]*)\s*\}\}")
 
+INTRO = "Secrets you can use as placeholders in tool arguments; their values are never shown to you:"
 
-def secrets(**values: str | tuple[str, str]) -> Middleware:
+
+def secrets(intro: str = INTRO, /, **values: str | tuple[str, str]) -> Middleware:
     """Make these secrets usable as `{{secrets.name}}` in the arguments of any tool before it in the chain.
 
     A value may come with a description: `secrets(github=(token, "GitHub token"))`. Put `secrets()`
-    after the tools it guards; tools added later in the chain are not covered.
+    after the tools it guards; tools added later in the chain are not covered. `intro` opens the list of
+    secrets in the system prompt; it is positional, so that any name is free for a secret.
     """
     described = {name: (value, "") if isinstance(value, str) else value for name, value in values.items()}
     vault = {name: value for name, (value, _) in described.items()}
     lines = (f"- {{{{secrets.{name}}}}}" + (f": {about}" if about else "") for name, (_, about) in described.items())
-    intro = "Secrets you can use as placeholders in tool arguments; their values are never shown to you:"
     note = "\n".join((intro, *lines))
 
     async def guard(request: Request, next: Next) -> AsyncIterator[Event]:
         system = "\n\n".join(part for part in (request.system, note) if part)
         tools = tuple(Guarded.over(tool, vault) for tool in request.tools)
-        async for event in next(replace(request, system=system, tools=tools)):
+        deferred = tuple(Guarded.over(tool, vault) for tool in request.deferred)
+        async for event in next(replace(request, system=system, tools=tools, deferred=deferred)):
             yield event
 
     return guard

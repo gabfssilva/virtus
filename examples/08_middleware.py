@@ -6,7 +6,7 @@ from dataclasses import replace
 from time import perf_counter
 
 from virtus import Event, Middleware, Next, Provider, Request, agent, tool
-from virtus.providers import OpenAI
+from virtus.providers import ChatCompletions
 
 
 async def timing(request: Request, next: Next) -> AsyncIterator[Event]:
@@ -46,9 +46,9 @@ def search(query: str) -> str:
 
 
 @agent(
-    provider=OpenAI(),
+    provider=ChatCompletions(),
     system="Answer from the wiki. If a search misses, follow its hint and search again instead of asking the user.",
-    capabilities=[timing, max_steps(4), escalate_to(OpenAI("gpt-4.1"), after=2), search],
+    capabilities=[timing, max_steps(4), escalate_to(ChatCompletions("gpt-4.1"), after=2), search],
 )
 async def analyst(question: str) -> str: ...
 

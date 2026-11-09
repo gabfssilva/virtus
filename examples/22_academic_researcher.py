@@ -59,7 +59,7 @@ class Critique(BaseModel):
 @agent(
     provider=model,
     system="Search both arXiv and OpenAlex. Return the four most relevant papers, no duplicates, with their summaries.",
-    capabilities=[arxiv, openalex, answer_after(4), observe()],
+    capabilities=[arxiv(), openalex(), answer_after(4), observe()],
 )
 async def scout(topic: str) -> list[Paper]:
     """Find papers on {topic}."""

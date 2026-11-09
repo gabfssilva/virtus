@@ -4,7 +4,7 @@ and timings. Add it to any agent; nothing else changes."""
 import asyncio
 
 from virtus import agent, observe, tool
-from virtus.providers import OpenAI
+from virtus.providers import ChatCompletions
 from virtus.tools import websearch
 
 
@@ -15,9 +15,9 @@ def population(city: str) -> int:
 
 
 @agent(
-    provider=OpenAI("gpt-6-luna", reasoning_effort="none"),
+    provider=ChatCompletions("gpt-6-luna", reasoning_effort="none"),
     system="Answer in one sentence. Use the tools.",
-    capabilities=[population, websearch, observe()],
+    capabilities=[population, websearch(), observe()],
 )
 async def assistant(question: str) -> str: ...
 

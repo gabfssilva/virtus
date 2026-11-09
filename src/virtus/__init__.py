@@ -4,7 +4,7 @@ from virtus.agent import Agent, agent
 from virtus.capability import Capabilities, context, on_input, on_message
 from virtus.compaction import compaction
 from virtus.journal import Journal, JsonJournal, MemoryJournal
-from virtus.knowledge import Document, Store, knowledge, memory
+from virtus.knowledge import Document, Passage, Store, knowledge, memory
 from virtus.lazy import lazy
 from virtus.live import Interrupted, Level, Live
 from virtus.message import (
@@ -14,6 +14,8 @@ from virtus.message import (
     AudioType,
     Delta,
     Event,
+    File,
+    FileType,
     Image,
     ImageType,
     MediaType,
@@ -28,7 +30,7 @@ from virtus.message import (
 from virtus.middleware import Capability, Middleware, Next
 from virtus.observe import observe
 from virtus.output import Snapshot
-from virtus.provider import LiveProvider, Provider, Session
+from virtus.provider import Embedder, LiveProvider, Provider, Session
 from virtus.request import Request
 from virtus.thread import Conversation, Thread
 from virtus.tool import Tool, tool
@@ -49,7 +51,10 @@ __all__ = [
     "Conversation",
     "Delta",
     "Document",
+    "Embedder",
     "Event",
+    "File",
+    "FileType",
     "Http",
     "Image",
     "ImageType",
@@ -64,6 +69,7 @@ __all__ = [
     "Message",
     "Middleware",
     "Next",
+    "Passage",
     "Provider",
     "Request",
     "Session",

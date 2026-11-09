@@ -73,6 +73,26 @@ def describe_observe():
         assert lines[3] == "│  ⚙ divide(a=1, b=0)"
         assert lines[4] == "│  ✗ divide ZeroDivisionError: division by zero · 1.0s"
 
+    async def it_cuts_what_it_shows_to_the_width(ticking: None):
+        @tool
+        def echo(text: str) -> str:
+            """Echo."""
+            return text
+
+        out = io.StringIO()
+
+        @agent(
+            provider=Scripted(calls(("echo", {"text": "x" * 50})), AssistantMessage("Done.")),
+            capabilities=[echo, observe(out, color=False, width=12)],
+        )
+        async def assistant(message: str) -> str: ...
+
+        await assistant.thread("u1")("echo")
+        lines = out.getvalue().splitlines()
+
+        assert lines[3] == '│  ⚙ echo(text="xxxxx…)'
+        assert lines[4] == "│  ↳ xxxxxxxxxxx… · 1.0s"
+
     async def it_closes_the_tree_when_the_step_fails(ticking: None):
         out = io.StringIO()
 

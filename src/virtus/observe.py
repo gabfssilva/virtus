@@ -20,17 +20,17 @@ from virtus.middleware import Middleware, Next
 from virtus.request import Request
 
 WIDTH = 100
-"""Longest line printed for a prompt, a tool's arguments or a tool's result."""
 
 
-def observe(out: TextIO | None = None, *, color: bool | None = None) -> Middleware:
+def observe(out: TextIO | None = None, *, color: bool | None = None, width: int = WIDTH) -> Middleware:
     """Show every run as a tree, as it happens: each provider call with its message count and tools, the
     tool calls and what they returned, the answer streamed, and how long each part took.
 
-    Writes to stderr unless `out` is given, in color when that is a terminal. Goes anywhere in
+    Writes to stderr unless `out` is given, in color when that is a terminal; a prompt, a tool's arguments
+    or a tool's result is cut to `width` characters. Goes anywhere in
     `capabilities=`: last, it shows what the provider receives, tools included; first, what the caller sees.
     """
-    console = _Console(out or sys.stderr, color)
+    console = _Console(out or sys.stderr, color, width)
     runs: dict[str, _Run] = {}
 
     async def observe(request: Request, next: Next) -> AsyncIterator[Event]:
@@ -54,7 +54,8 @@ def observe(out: TextIO | None = None, *, color: bool | None = None) -> Middlewa
 
 
 class _Console:
-    def __init__(self, out: TextIO, color: bool | None) -> None:
+    def __init__(self, out: TextIO, color: bool | None, width: int) -> None:
+        self.width = width
         self.out = out
         self.color = out.isatty() if color is None else color
 
@@ -94,7 +95,7 @@ class _Run:
         self.heard = 0
         self.tools_started = self.started
         asked = request.messages[-1] if request.messages else None
-        prompt = f" · {_clip(asked.content)}" if isinstance(asked, UserMessage) else ""
+        prompt = f" · {_clip(asked.content, self.console.width)}" if isinstance(asked, UserMessage) else ""
         console.line(f"▶ {'/'.join(request.thread.path)}{console.dim(prompt)}")
 
     def step(self, request: Request) -> None:
@@ -103,6 +104,8 @@ class _Run:
         self.typing = False
         self.heard = 0
         tools = f" · tools: {', '.join(t.name for t in request.tools)}" if request.tools else ""
+        if request.deferred:
+            tools += f" · {len(request.loaded)}/{len(request.deferred)} deferred tools loaded"
         count = _plural(len(request.messages), "msg")
         self.console.line(f"├─ {request.provider!r} · {count}{self.console.dim(tools)}")
 
@@ -125,7 +128,7 @@ class _Run:
                 if calls:
                     console.line(console.dim(f"│  {elapsed}{first}"))
                     for call in calls:
-                        console.line(f"│  {console.cyan(f'⚙ {call.name}')}({_arguments(call)})")
+                        console.line(f"│  {console.cyan(f'⚙ {call.name}')}({_arguments(call, console.width)})")
                     self.tools_started = perf_counter()
                 else:
                     size = f"{len(content)} chars" if content else ""
@@ -138,13 +141,13 @@ class _Run:
             case ToolResult(name=name, content=content, is_error=error):
                 took = console.dim(f"· {perf_counter() - self.tools_started:.1f}s")
                 mark = console.red(f"✗ {name}") if error else console.dim("↳")
-                console.line(f"│  {mark} {_clip(content)} {took}")
+                console.line(f"│  {mark} {_clip(content, console.width)} {took}")
             case _:
                 pass
 
     def failed(self, error: Exception) -> None:
         self._end_typing()
-        self.console.line(f"└─ {self.console.red('✗')} {type(error).__name__}: {_clip(str(error))}")
+        self.console.line(f"└─ {self.console.red('✗')} {type(error).__name__}: {_clip(str(error), self.console.width)}")
         self.done = True
 
     def _token(self) -> None:
@@ -163,17 +166,18 @@ class _Run:
             self.typing = False
 
 
-def _arguments(call: ToolCall) -> str:
+def _arguments(call: ToolCall, width: int) -> str:
     try:
         arguments = json.loads(call.arguments or "{}")
     except ValueError:
-        return _clip(call.arguments)
+        return _clip(call.arguments, width)
     if not isinstance(arguments, dict):
-        return _clip(call.arguments)
-    return _clip(", ".join(f"{name}={json.dumps(value, ensure_ascii=False)}" for name, value in arguments.items()))
+        return _clip(call.arguments, width)
+    pairs = (f"{name}={json.dumps(value, ensure_ascii=False)}" for name, value in arguments.items())
+    return _clip(", ".join(pairs), width)
 
 
-def _clip(text: str, width: int = WIDTH) -> str:
+def _clip(text: str, width: int) -> str:
     flat = " ".join(text.split())
     return flat if len(flat) <= width else flat[: width - 1] + "…"
 

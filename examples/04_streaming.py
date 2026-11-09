@@ -5,7 +5,7 @@ import asyncio
 from collections.abc import AsyncIterator
 
 from virtus import Event, TextDelta, ToolCallDelta, ToolResult, agent, tool
-from virtus.providers import OpenAI
+from virtus.providers import ChatCompletions
 
 
 @tool
@@ -14,13 +14,13 @@ def population(city: str) -> int:
     return {"tokyo": 37_400_000, "delhi": 32_900_000, "shanghai": 29_200_000}.get(city.lower(), 0)
 
 
-@agent(provider=OpenAI())
+@agent(provider=ChatCompletions())
 async def story(topic: str) -> AsyncIterator[str]:
     """Tell a three-sentence story about {topic}."""
     ...
 
 
-@agent(provider=OpenAI(), capabilities=[population])
+@agent(provider=ChatCompletions(), capabilities=[population])
 async def compare(first: str, second: str) -> AsyncIterator[Event]:
     """Compare the populations of {first} and {second} in two sentences."""
     ...

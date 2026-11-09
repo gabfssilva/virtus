@@ -4,7 +4,7 @@ import asyncio
 import re
 
 from virtus import AssistantMessage, Message, UserMessage, agent, on_input, on_message
-from virtus.providers import OpenAI
+from virtus.providers import ChatCompletions
 
 CARD = re.compile(r"\b\d(?:[ -]?\d){12,15}\b")
 
@@ -28,7 +28,7 @@ def log(message: Message) -> Message:
     return message
 
 
-@agent(provider=OpenAI(), capabilities=[redact_cards, refuse_off_topic, log])
+@agent(provider=ChatCompletions(), capabilities=[redact_cards, refuse_off_topic, log])
 async def support(message: str) -> str: ...
 
 

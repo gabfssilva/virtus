@@ -162,6 +162,13 @@ def describe_converse():
         assert level(b"\x00\x02" * 2400)  # 512 > 300
         assert not level(b"\x10\x00" * 2400)  # 16
 
+    def it_takes_the_calibration_time_ratio_and_floor():
+        level = Level(floor=10.0, ratio=4.0, calibration_ms=100)
+
+        assert not level(b"\x05\x00" * 2400)  # 100 ms of 5
+        assert level.threshold == 20.0
+        assert level(b"\x15\x00" * 2400)  # 21
+
 
 class Voice(Provider, LiveProvider, Session):
     """A fake realtime connection: replies in order and records what the thread sent it."""

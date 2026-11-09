@@ -4,17 +4,17 @@
 import asyncio
 
 from virtus import agent, observe
-from virtus.providers import OpenAI
+from virtus.providers import ChatCompletions
 from virtus.tools import calculator, http, wikipedia
 
 # Chat Completions only takes function tools from gpt-6 with reasoning off; the Responses API has no such limit.
-model = OpenAI(reasoning_effort="none")
+model = ChatCompletions(reasoning_effort="none")
 
 
 @agent(
     provider=model,
     system="Look facts up before answering and do every calculation with the calculator. Answer in one paragraph.",
-    capabilities=[wikipedia, calculator, http, observe()],
+    capabilities=[wikipedia(), calculator(), http(), observe()],
 )
 async def assistant(question: str) -> str: ...
 

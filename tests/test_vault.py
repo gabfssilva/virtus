@@ -38,6 +38,16 @@ def describe_secrets():
         )
         assert "s3cret" not in provider.requests[0].system
 
+    async def it_takes_the_intro_and_leaves_its_name_free_for_a_secret():
+        provider = Scripted(AssistantMessage("done"))
+
+        @agent(provider=provider, capabilities=[probe, secrets("Placeholders:", intro="s3cret")])
+        async def chat(message: str) -> str: ...
+
+        await chat("go")
+
+        assert provider.requests[0].system == "Placeholders:\n- {{secrets.intro}}"
+
     async def it_keeps_the_arguments_valid_json_whatever_the_value():
         seen.clear()
         provider = Scripted(calls(("probe", {"token": "{{ secrets.api }}"})), AssistantMessage("done"))

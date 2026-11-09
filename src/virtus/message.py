@@ -8,7 +8,8 @@ from typing import Literal
 
 type ImageType = Literal["image/jpeg", "image/png", "image/gif", "image/webp"]
 type AudioType = Literal["audio/wav", "audio/mpeg", "audio/flac", "audio/ogg", "audio/aac"]
-type MediaType = ImageType | AudioType
+type FileType = Literal["application/pdf"]
+type MediaType = ImageType | AudioType | FileType
 
 
 @dataclass(frozen=True)
@@ -68,6 +69,37 @@ class Audio:
         return attached(Audio, value)
 
 
+@dataclass(frozen=True)
+class File:
+    """A file the model reads itself where the provider can; elsewhere it gets `text` instead."""
+
+    data: bytes
+    media_type: FileType = "application/pdf"
+    name: str = "file.pdf"
+    text: str | None = None
+    """The file as text, for providers that take no files; without it, they refuse it."""
+
+    @classmethod
+    def read(cls, path: str | Path) -> "File":
+        """Load a PDF file, named after it."""
+        if Path(path).suffix.lower() != ".pdf":
+            raise ValueError(f"{path}: unsupported file type")
+        return cls(Path(path).read_bytes(), name=Path(path).name)
+
+    @staticmethod
+    def found_in(value: object) -> tuple["File", ...]:
+        """The files a value carries: itself, or the items of a sequence (not a string) that are files."""
+        return attached(File, value)
+
+
+def transcribed(content: str, files: Sequence[File]) -> str:
+    """`content` followed by the text of each file, for a model that cannot read the files themselves."""
+    for file in files:
+        if file.text is None:
+            raise TypeError(f"{file.name}: this provider takes no files, and the file has no text")
+    return "\n\n".join([content, *(f"[file {d.name}]\n{d.text}" for d in files)])
+
+
 def attached[T](kind: type[T], value: object) -> tuple[T, ...]:
     if isinstance(value, kind):
         return (value,)
@@ -77,11 +109,13 @@ def attached[T](kind: type[T], value: object) -> tuple[T, ...]:
 
 
 def placeholder(value: object) -> str | None:
-    """How a media value reads in text: `[image]` or `[audio]`; `None` for anything else."""
+    """How a media value reads in text: `[image]`, `[audio]` or `[file]`; `None` for anything else."""
     if Image.found_in(value):
         return "[image]"
     if Audio.found_in(value):
         return "[audio]"
+    if File.found_in(value):
+        return "[file]"
     return None
 
 
@@ -90,6 +124,7 @@ class UserMessage:
     content: str
     images: tuple[Image, ...] = ()
     audio: tuple[Audio, ...] = ()
+    files: tuple[File, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -130,6 +165,9 @@ class ToolResult:
     is_error: bool = False
     images: tuple[Image, ...] = ()
     audio: tuple[Audio, ...] = ()
+    files: tuple[File, ...] = ()
+    tools: tuple[str, ...] = ()
+    """Deferred tools this result loads, by name; usable from the next step on. See `Request.deferred`."""
 
 
 @dataclass(frozen=True)

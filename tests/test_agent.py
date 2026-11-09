@@ -10,6 +10,7 @@ from virtus import (
     AssistantMessage,
     Audio,
     Event,
+    File,
     Image,
     MemoryJournal,
     Next,
@@ -175,6 +176,20 @@ def describe_images():
         message = describe.input(picture, "What is this?", [picture, picture])
 
         assert message == UserMessage("What is this? ([image])", (picture, picture, picture))
+
+    def it_attaches_file_arguments(tmp_path: Path):
+        (tmp_path / "paper.pdf").write_bytes(b"%PDF")
+        paper = File.read(tmp_path / "paper.pdf")
+
+        @agent(provider=Scripted())
+        async def summarize(document: File) -> str:
+            """Summarize {document}."""
+            ...
+
+        assert paper == File(b"%PDF", name="paper.pdf")
+        assert summarize.input(paper) == UserMessage("Summarize [file].", files=(paper,))
+        with pytest.raises(ValueError, match="unsupported file type"):
+            File.read(tmp_path / "notes.txt")
 
     def it_reads_files_and_rejects_unknown_types(tmp_path: Path):
         file = tmp_path / "pixel.png"

@@ -6,8 +6,8 @@ from xml.etree import ElementTree
 
 from pydantic import BaseModel
 
-from virtus.tool import tool
-from virtus.tools.net import get
+from virtus.tool import Tool, tool
+from virtus.tools.net import Net
 
 ATOM = {"a": "http://www.w3.org/2005/Atom"}
 
@@ -21,46 +21,57 @@ class Paper(BaseModel):
     summary: str
 
 
-@tool
-def arxiv(query: str, count: int = 5) -> list[Paper]:
-    """Search arXiv preprints by keywords; every word must match."""
-    terms = " AND ".join(f"all:{word}" for word in query.split())  # a bare phrase matches on its first word only
-    params = {"search_query": terms, "max_results": count, "sortBy": "relevance"}
-    feed = ElementTree.fromstring(get(f"https://export.arxiv.org/api/query?{urlencode(params)}"))
-    return [
-        Paper(
-            title=" ".join(entry.findtext("a:title", "", ATOM).split()),
-            authors=[name.text or "" for name in entry.findall("a:author/a:name", ATOM)],
-            year=int(entry.findtext("a:published", "0", ATOM)[:4]) or None,
-            url=entry.findtext("a:id", "", ATOM),
-            summary=" ".join(entry.findtext("a:summary", "", ATOM).split()),
-        )
-        for entry in feed.findall("a:entry", ATOM)
-    ]
+def arxiv(*, net: Net = Net(), count: int = 5, url: str = "https://export.arxiv.org/api/query") -> Tool:
+    """The `arxiv` tool, querying `url` through `net`; `count` is its default for the model's argument."""
+
+    def arxiv(query: str, count: int = count) -> list[Paper]:
+        """Search arXiv preprints by keywords; every word must match."""
+        terms = " AND ".join(f"all:{word}" for word in query.split())  # a bare phrase matches on its first word only
+        params = {"search_query": terms, "max_results": count, "sortBy": "relevance"}
+        feed = ElementTree.fromstring(net.get(f"{url}?{urlencode(params)}"))
+        return [
+            Paper(
+                title=" ".join(entry.findtext("a:title", "", ATOM).split()),
+                authors=[name.text or "" for name in entry.findall("a:author/a:name", ATOM)],
+                year=int(entry.findtext("a:published", "0", ATOM)[:4]) or None,
+                url=entry.findtext("a:id", "", ATOM),
+                summary=" ".join(entry.findtext("a:summary", "", ATOM).split()),
+            )
+            for entry in feed.findall("a:entry", ATOM)
+        ]
+
+    return tool(arxiv)
 
 
-@tool
-def openalex(query: str, count: int = 5) -> list[Paper]:
-    """Search published papers across journals and conferences, with citation counts."""
-    params = {
-        "search": query,
-        "per-page": count,
-        "select": "id,doi,title,publication_year,cited_by_count,authorships,abstract_inverted_index",
-    }
-    if key := os.environ.get("OPENALEX_API_KEY"):  # without one, a daily budget is shared by the whole IP address
-        params["api_key"] = key
-    works = _Works.model_validate_json(get(f"https://api.openalex.org/works?{urlencode(params)}")).results
-    return [
-        Paper(
-            title=work.title or "(untitled)",
-            authors=[a.author.display_name for a in work.authorships],
-            year=work.publication_year,
-            url=work.doi or work.id,
-            citations=work.cited_by_count,
-            summary=_abstract(work.abstract_inverted_index),
-        )
-        for work in works
-    ]
+def openalex(
+    *, net: Net = Net(), count: int = 5, url: str = "https://api.openalex.org/works", api_key: str | None = None
+) -> Tool:
+    """The `openalex` tool, querying `url` through `net` with `api_key`, by default `OPENALEX_API_KEY`; without
+    one, a daily budget is shared by the whole IP address. `count` is its default for the model's argument."""
+
+    def openalex(query: str, count: int = count) -> list[Paper]:
+        """Search published papers across journals and conferences, with citation counts."""
+        params = {
+            "search": query,
+            "per-page": count,
+            "select": "id,doi,title,publication_year,cited_by_count,authorships,abstract_inverted_index",
+        }
+        if key := api_key or os.environ.get("OPENALEX_API_KEY"):
+            params["api_key"] = key
+        works = _Works.model_validate_json(net.get(f"{url}?{urlencode(params)}")).results
+        return [
+            Paper(
+                title=work.title or "(untitled)",
+                authors=[a.author.display_name for a in work.authorships],
+                year=work.publication_year,
+                url=work.doi or work.id,
+                citations=work.cited_by_count,
+                summary=_abstract(work.abstract_inverted_index),
+            )
+            for work in works
+        ]
+
+    return tool(openalex)
 
 
 class _Author(BaseModel):

@@ -22,6 +22,7 @@ from virtus import (
     Audio,
     AudioDelta,
     Event,
+    File,
     Image,
     TextDelta,
     ToolCall,
@@ -30,10 +31,12 @@ from virtus import (
     Usage,
     UserMessage,
     agent,
+    lazy,
     tool,
 )
-from virtus.providers import OpenAI
-from virtus.providers.openai import _messages
+from virtus.lazy import Search
+from virtus.providers import ChatCompletions
+from virtus.providers.chat_completions import _messages, _tool
 
 
 def describe_messages():
@@ -110,6 +113,23 @@ def describe_messages():
             },
         ]
 
+    def it_sends_files_as_file_parts_or_as_their_text_when_the_server_takes_none():
+        paper = File(b"%PDF", name="paper.pdf", text="Abstract")
+        history = (UserMessage("Summarize [file]", files=(paper,)), ToolResult("c1", "pdf", "[file]", files=(paper,)))
+        part = {"type": "file", "file": {"file_data": "data:application/pdf;base64,JVBERg==", "filename": "paper.pdf"}}
+
+        assert _messages("", history) == [
+            {"role": "user", "content": [{"type": "text", "text": "Summarize [file]"}, part]},
+            {"role": "tool", "tool_call_id": "c1", "content": "[file]"},
+            {"role": "user", "content": [{"type": "text", "text": "Media returned by the tool calls above."}, part]},
+        ]
+        assert _messages("", history, files=False) == [
+            {"role": "user", "content": "Summarize [file]\n\n[file paper.pdf]\nAbstract"},
+            {"role": "tool", "tool_call_id": "c1", "content": "[file]\n\n[file paper.pdf]\nAbstract"},
+        ]
+        with pytest.raises(TypeError, match="no text"):
+            _messages("", (UserMessage("?", files=(File(b"%PDF"),)),), files=False)
+
 
 class Forecast(BaseModel):
     city: str
@@ -126,7 +146,7 @@ def describe_openai():
             """Current weather for a city."""
             return f"Sunny and 25°C in {city}"
 
-        @agent(provider=OpenAI(temperature=0), capabilities=[weather])
+        @agent(provider=ChatCompletions(temperature=0), capabilities=[weather])
         async def forecast(city: str) -> Forecast:
             """Use the weather tool to tell whether it is sunny in {city}."""
             ...
@@ -146,7 +166,7 @@ def describe_streaming():
             chunk(ChoiceDelta(tool_calls=[fragment(0, arguments='{"city": '), fragment(1, id="c2", name="time")])),
             chunk(ChoiceDelta(tool_calls=[fragment(0, arguments='"Paris"}'), fragment(1, arguments="{}")])),
         ]
-        provider = OpenAI(max_tokens=300, reasoning_effort="low")
+        provider = ChatCompletions(max_tokens=300, reasoning_effort="low")
         client = Replaying(chunks, [chunk(ChoiceDelta(content="done")), counted(prompt=40, completion=3)])
         provider.__dict__["_client"] = client
 
@@ -171,6 +191,24 @@ def describe_streaming():
             ),
         ]
 
+    async def it_sends_a_deferred_tool_only_once_a_result_has_loaded_it():
+        function = ChoiceDeltaToolCallFunction(name="tool_search", arguments='{"query": "weather"}')
+        search = ChoiceDeltaToolCall(index=0, id="c1", type="function", function=function)
+        provider = ChatCompletions()
+        client = Replaying([chunk(ChoiceDelta(tool_calls=[search]))], [chunk(ChoiceDelta(content="done"))])
+        provider.__dict__["_client"] = client
+
+        @tool
+        def weather(city: str) -> str:
+            """Weather in a city."""
+            return f"sunny in {city}"
+
+        @agent(provider=provider, capabilities=[lazy(weather)])
+        async def bot(message: str) -> str: ...
+
+        assert await bot("weather?") == "done"
+        assert client.calls[0]["tools"] == [_tool(Search.over((weather,)))]
+        assert client.calls[1]["tools"] == [_tool(Search.over((weather,))), _tool(weather)]
 
     async def it_speaks_the_answer_when_audio_is_requested():
         chunks = [
@@ -179,7 +217,7 @@ def describe_streaming():
             chunk(ChoiceDelta(audio=ChoiceDeltaAudio(data="Rg=="))),
             chunk(ChoiceDelta(audio=ChoiceDeltaAudio(expires_at=1))),
         ]
-        provider = OpenAI(voice="echo")
+        provider = ChatCompletions(voice="echo")
         client = Replaying(chunks, chunks)
         provider.__dict__["_client"] = client
 
@@ -207,7 +245,7 @@ def describe_streaming():
     async def it_reads_the_images_a_server_streams_in_the_delta():
         part = {"type": "image_url", "image_url": {"url": "data:image/png;base64,iVBORw=="}}
         delta = ChoiceDelta.model_validate({"content": "Here", "images": [part]})
-        provider = OpenAI()
+        provider = ChatCompletions()
         client = Replaying([chunk(delta)])
         provider.__dict__["_client"] = client
 

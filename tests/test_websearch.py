@@ -25,9 +25,14 @@ def describe_websearch():
         ]
         monkeypatch.setattr(f"{ENGINE}.text", _answering(rows, asked))
 
-        result = await websearch.execute(ToolCall("1", "websearch", '{"query": "asyncio TaskGroup", "count": 3}'))
+        result = await websearch().execute(ToolCall("1", "websearch", '{"query": "asyncio TaskGroup", "count": 3}'))
 
-        assert asked == [("asyncio TaskGroup", {"max_results": 3, "timelimit": None})]
+        assert asked == [
+            (
+                "asyncio TaskGroup",
+                {"region": "us-en", "safesearch": "moderate", "backend": "auto", "timelimit": None, "max_results": 3},
+            )
+        ]
         assert result == ToolResult(
             "1",
             "websearch",
@@ -50,9 +55,14 @@ def describe_websearch():
         monkeypatch.setattr(f"{ENGINE}.news", _answering(rows, asked))
 
         call = ToolCall("1", "websearch", json.dumps({"query": "python", "kind": "news", "period": "w"}))
-        result = await websearch.execute(call)
+        result = await websearch().execute(call)
 
-        assert asked == [("python", {"max_results": 10, "timelimit": "w"})]
+        assert asked == [
+            (
+                "python",
+                {"region": "us-en", "safesearch": "moderate", "backend": "auto", "timelimit": "w", "max_results": 10},
+            )
+        ]
         expected = "Python 3.15 released\nhttps://example.org/py315\n2026-10-07 · Example News\nThe new release."
         assert result.content == expected
 
@@ -69,7 +79,7 @@ def describe_websearch():
 
         async def search(kind: str) -> str:
             call = ToolCall("1", "websearch", json.dumps({"query": "q", "kind": kind}))
-            return (await websearch.execute(call)).content
+            return (await websearch().execute(call)).content
 
         assert await search("images") == "A cat\nhttps://example.org/cat.jpg\n800x600 · Bing\nhttps://example.org/cats"
         assert await search("videos") == "Talk\nhttps://example.org/v\n2026-01-02 · YouTube · 12:03\nA talk."
@@ -84,17 +94,29 @@ def describe_websearch():
         monkeypatch.setattr(f"{ENGINE}.text", _answering([], []))
         monkeypatch.setattr(f"{ENGINE}.books", nothing)
 
-        empty = await websearch.execute(ToolCall("1", "websearch", '{"query": "qzxv"}'))
-        failed = await websearch.execute(ToolCall("1", "websearch", '{"query": "qzxv", "kind": "books"}'))
+        empty = await websearch().execute(ToolCall("1", "websearch", '{"query": "qzxv"}'))
+        failed = await websearch().execute(ToolCall("1", "websearch", '{"query": "qzxv", "kind": "books"}'))
 
         assert (empty.content, failed.content) == ("No results.", "No results.")
 
+    async def it_passes_its_settings_to_ddgs(monkeypatch: pytest.MonkeyPatch):
+        asked: list[tuple[str, dict[str, object]]] = []
+        monkeypatch.setattr(f"{ENGINE}.text", _answering([], asked))
+
+        await websearch(count=4, backend="google", region="br-pt", safesearch="off").execute(
+            ToolCall("1", "websearch", '{"query": "q"}')
+        )
+
+        options = {"region": "br-pt", "safesearch": "off", "backend": "google", "timelimit": None, "max_results": 4}
+        assert asked == [("q", options)]
+
     def it_describes_itself_for_the_model():
-        assert websearch.name == "websearch"
-        assert websearch.description.startswith("Search the web:")
-        assert websearch.schema["required"] == ["query"]
+        tool = websearch()
+        assert tool.name == "websearch"
+        assert tool.description.startswith("Search the web:")
+        assert tool.schema["required"] == ["query"]
         kinds = ["text", "news", "images", "videos", "books"]
-        assert websearch.schema["properties"] == {
+        assert tool.schema["properties"] == {
             "query": {"type": "string", "title": "Query"},
             "kind": {"type": "string", "title": "Kind", "default": "text", "enum": kinds},
             "count": {"type": "integer", "title": "Count", "default": 10},

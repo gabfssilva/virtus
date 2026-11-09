@@ -7,7 +7,7 @@ from virtus.tools import calculator
 
 
 async def _calc(expression: str) -> ToolResult:
-    return await calculator.execute(ToolCall("c", "calculator", json.dumps({"expression": expression})))
+    return await calculator().execute(ToolCall("c", "calculator", json.dumps({"expression": expression})))
 
 
 def describe_calculator():
@@ -42,6 +42,16 @@ def describe_calculator():
     async def it_bounds_exponents():
         assert (await _calc("2 ** 100000")).is_error
         assert (await _calc("(10 ** 1000) ** 5000")).is_error
+
+    async def it_takes_its_functions_constants_and_bounds():
+        tool = calculator(functions={"double": lambda x: 2 * x}, constants={"answer": 42}, max_exponent=3)
+
+        async def run(expression: str) -> ToolResult:
+            return await tool.execute(ToolCall("c", "calculator", json.dumps({"expression": expression})))
+
+        assert (await run("double(answer)")).content == "84"
+        assert (await run("sqrt(4)")).is_error and (await run("2 ** 4")).is_error
+        assert "double" in tool.description and "answer" in tool.description and "sqrt" not in tool.description
 
     async def it_reports_math_errors():
         assert "ZeroDivisionError" in (await _calc("1 / 0")).content

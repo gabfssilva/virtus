@@ -4,10 +4,10 @@
 import asyncio
 
 from virtus import agent, observe
-from virtus.providers import OpenAI
+from virtus.providers import ChatCompletions
 
 # Chat Completions only takes function tools from gpt-6 with reasoning off; the Responses API has no such limit.
-model = OpenAI(reasoning_effort="none")
+model = ChatCompletions(reasoning_effort="none")
 
 
 @agent(provider=model, system="You are a researcher. Answer in two or three sentences.")

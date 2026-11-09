@@ -73,11 +73,12 @@ class Live:
         speech: Detector | None = None,
         quiet_ms: int = 800,
         barge_in_ms: int = 300,
+        lead_ms: int = 300,
     ) -> AsyncIterator[Event | Interrupted]:
         """Talk hands free: a turn starts when `speech` is detected, ends after `quiet_ms` of silence, and
         speech lasting `barge_in_ms` during the reply interrupts it and opens the next turn.
 
-        The 300 ms before the detector fires are sent too, so the first syllable is not clipped. Frames
+        The `lead_ms` before the detector fires are sent too, so the first syllable is not clipped. Frames
         heard during the reply that are not speech are dropped: with open speakers that is the reply
         itself, which `Level` tells from the room only by volume; headphones avoid the problem.
         """
@@ -93,7 +94,7 @@ class Live:
         try:
             opening: list[bytes] = []
             while True:
-                if not await self._listen(queue, detect, opening, quiet_ms):
+                if not await self._listen(queue, detect, opening, quiet_ms, lead_ms):
                     return
                 opening = []
                 async for event in self._reply(queue, detect, barge_in_ms, opening):
@@ -101,7 +102,9 @@ class Live:
         finally:
             pumping.cancel()
 
-    async def _listen(self, queue: _Frames, detect: Detector, opening: list[bytes], quiet_ms: int) -> bool:
+    async def _listen(
+        self, queue: _Frames, detect: Detector, opening: list[bytes], quiet_ms: int, lead_ms: int
+    ) -> bool:
         """Hear one turn of speech; `False` when the frames ran out first."""
         recent: deque[bytes] = deque()
         for pcm in opening:
@@ -121,7 +124,7 @@ class Live:
                     await self.hear(frame)
             else:
                 recent.append(pcm)
-                while sum(map(_ms, recent)) > 300:
+                while sum(map(_ms, recent)) > lead_ms:
                     recent.popleft()
         return True
 
@@ -165,12 +168,16 @@ class Live:
 
 
 class Level:
-    """Speech is sound louder than the room. The first second of frames calibrates: speech is three times
-    the ambient level, and never less than `floor`. A `threshold` skips the calibration."""
+    """Speech is sound louder than the room. The first `calibration_ms` of frames calibrate: speech is
+    `ratio` times the ambient level, and never less than `floor`. A `threshold` skips the calibration."""
 
-    def __init__(self, threshold: float | None = None, floor: float = 300.0) -> None:
+    def __init__(
+        self, threshold: float | None = None, floor: float = 300.0, ratio: float = 3.0, calibration_ms: int = 1000
+    ) -> None:
         self.threshold = threshold
         self.floor = floor
+        self.ratio = ratio
+        self.calibration_ms = calibration_ms
         self._ambient: list[float] = []
         self._calibrated_ms = 0
 
@@ -180,8 +187,8 @@ class Level:
         if self.threshold is None:
             self._ambient.append(level)
             self._calibrated_ms += _ms(pcm)
-            if self._calibrated_ms >= 1000:
-                self.threshold = max(3 * sum(self._ambient) / len(self._ambient), self.floor)
+            if self._calibrated_ms >= self.calibration_ms:
+                self.threshold = max(self.ratio * sum(self._ambient) / len(self._ambient), self.floor)
             return False
         return level > self.threshold
 

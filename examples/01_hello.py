@@ -3,10 +3,10 @@
 import asyncio
 
 from virtus import agent
-from virtus.providers import OpenAI
+from virtus.providers import ChatCompletions
 
 
-@agent(provider=OpenAI())
+@agent(provider=ChatCompletions())
 async def haiku(topic: str) -> str:
     """Write a haiku about {topic}."""
     ...

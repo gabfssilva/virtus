@@ -5,7 +5,7 @@ import struct
 import zlib
 
 from virtus import Image, agent
-from virtus.providers import OpenAI
+from virtus.providers import ChatCompletions
 
 
 def solid_png(red: int, green: int, blue: int, size: int = 128) -> Image:
@@ -20,7 +20,7 @@ def solid_png(red: int, green: int, blue: int, size: int = 128) -> Image:
     return Image(b"\x89PNG\r\n\x1a\n" + header + data + chunk(b"IEND", b""), "image/png")
 
 
-@agent(provider=OpenAI())
+@agent(provider=ChatCompletions())
 async def colour(picture: Image) -> str:
     """What colour is this image? Answer with one word."""
     ...

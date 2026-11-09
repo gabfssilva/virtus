@@ -20,7 +20,7 @@ from openai.types.realtime import (
 from openai.types.realtime.realtime_error import RealtimeError
 
 from virtus import AssistantMessage, Audio, AudioDelta, Image, TextDelta, ToolCall, ToolCallDelta, agent, tool
-from virtus.providers import OpenAI
+from virtus.providers import ChatCompletions
 
 PCM = {"type": "audio/pcm", "rate": 24000}
 
@@ -28,7 +28,7 @@ PCM = {"type": "audio/pcm", "rate": 24000}
 def describe_realtime_session():
     async def it_turns_server_speech_detection_off_before_any_audio():
         connection = Connection()
-        provider = OpenAI("gpt-realtime-2.1-mini")
+        provider = ChatCompletions("gpt-realtime-2.1-mini")
         provider.__dict__["_client"] = SimpleNamespace(realtime=SimpleNamespace(connect=connection.connect))
 
         @agent(provider=provider)
@@ -64,7 +64,7 @@ def describe_realtime_session():
             ],
             [added("i2"), transcript("Bye"), done("completed")],
         )
-        provider = OpenAI("gpt-realtime-2.1-mini", voice="marin")
+        provider = ChatCompletions("gpt-realtime-2.1-mini", voice="marin")
         provider.__dict__["_client"] = SimpleNamespace(realtime=SimpleNamespace(connect=connection.connect))
 
         @agent(provider=provider, system="Be brief.", capabilities=[clock])
@@ -118,7 +118,7 @@ def describe_realtime_session():
             [added("i1"), function_call("c1", "clock", "{}"), done("completed")],
             [added("i2"), transcript("Noon."), done("completed")],
         )
-        provider = OpenAI("gpt-realtime-2.1-mini")
+        provider = ChatCompletions("gpt-realtime-2.1-mini")
         provider.__dict__["_client"] = SimpleNamespace(realtime=SimpleNamespace(connect=connection.connect))
 
         @agent(provider=provider, capabilities=[clock])
@@ -136,7 +136,7 @@ def describe_realtime_session():
 
     async def it_interrupts_the_reply_being_spoken_and_shows_images():
         connection = Connection([added("i1"), transcript("Long story"), done("cancelled")])
-        provider = OpenAI("gpt-realtime-2.1-mini")
+        provider = ChatCompletions("gpt-realtime-2.1-mini")
         provider.__dict__["_client"] = SimpleNamespace(realtime=SimpleNamespace(connect=connection.connect))
 
         @agent(provider=provider)
@@ -166,7 +166,7 @@ def describe_realtime_session():
         detail = RealtimeError(type="invalid_request_error", code="response_cancel_not_active", message="none")
         stale = RealtimeErrorEvent(event_id="e", type="error", error=detail)
         connection = Connection([stale, added("i1"), transcript("Hi"), done("completed")])
-        provider = OpenAI("gpt-realtime-2.1-mini")
+        provider = ChatCompletions("gpt-realtime-2.1-mini")
         provider.__dict__["_client"] = SimpleNamespace(realtime=SimpleNamespace(connect=connection.connect))
 
         @agent(provider=provider)
@@ -181,7 +181,7 @@ def describe_realtime_session():
         detail = RealtimeError(type="invalid_request_error", code="unsupported", message="no")
         error = RealtimeErrorEvent(event_id="e", type="error", error=detail)
         connection = Connection([error])
-        provider = OpenAI("gpt-realtime-2.1-mini")
+        provider = ChatCompletions("gpt-realtime-2.1-mini")
         provider.__dict__["_client"] = SimpleNamespace(realtime=SimpleNamespace(connect=connection.connect))
 
         @agent(provider=provider)
@@ -285,4 +285,3 @@ class Connection:
             self.sent.append((kind, arguments))
 
         return send
-

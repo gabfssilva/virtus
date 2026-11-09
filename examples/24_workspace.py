@@ -5,10 +5,10 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from virtus import agent, observe, workspace
-from virtus.providers import OpenAI
+from virtus.providers import ChatCompletions
 
 # Chat Completions only takes function tools from gpt-6 with reasoning off; the Responses API has no such limit.
-model = OpenAI(reasoning_effort="none")
+model = ChatCompletions(reasoning_effort="none")
 
 
 async def main() -> None:

@@ -37,7 +37,7 @@ def describe_wikipedia():
         fetch = Fetch(SEARCH, SUMMARY)
         monkeypatch.setattr(net, "urlopen", fetch)
 
-        result = await wikipedia.execute(ToolCall("c", "wikipedia", json.dumps({"query": "honey bee", "count": 1})))
+        result = await wikipedia().execute(ToolCall("c", "wikipedia", json.dumps({"query": "honey bee", "count": 1})))
 
         assert [r.full_url for r in fetch.requests] == [
             "https://en.wikipedia.org/w/rest.php/v1/search/page?q=honey+bee&limit=1",
@@ -56,7 +56,7 @@ def describe_wikipedia():
         fetch = Fetch(json.dumps({"pages": []}).encode())
         monkeypatch.setattr(net, "urlopen", fetch)
 
-        result = await wikipedia.execute(ToolCall("c", "wikipedia", json.dumps({"query": "abelha", "lang": "pt"})))
+        result = await wikipedia().execute(ToolCall("c", "wikipedia", json.dumps({"query": "abelha", "lang": "pt"})))
 
         assert fetch.requests[0].full_url.startswith("https://pt.wikipedia.org/w/rest.php/v1/search/page?q=abelha")
         assert result.content == "[]"

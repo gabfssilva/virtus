@@ -13,7 +13,7 @@ from datetime import datetime
 import sounddevice
 
 from virtus import AssistantMessage, AudioDelta, Interrupted, TextDelta, ToolResult, agent, tool
-from virtus.providers import OpenAI
+from virtus.providers import ChatCompletions
 
 RATE = 24_000
 
@@ -25,7 +25,7 @@ def clock() -> str:
 
 
 @agent(
-    provider=OpenAI(sys.argv[1] if len(sys.argv) > 1 else "gpt-realtime-2.1-mini"),
+    provider=ChatCompletions(sys.argv[1] if len(sys.argv) > 1 else "gpt-realtime-2.1-mini"),
     system="You are talking out loud. Answer in one or two short sentences.",
     capabilities=[clock],
 )

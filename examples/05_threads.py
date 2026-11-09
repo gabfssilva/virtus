@@ -3,10 +3,10 @@
 import asyncio
 
 from virtus import agent
-from virtus.providers import OpenAI
+from virtus.providers import ChatCompletions
 
 
-@agent(provider=OpenAI(), system="Answer in one short sentence.")
+@agent(provider=ChatCompletions(), system="Answer in one short sentence.")
 async def chat(message: str) -> str: ...
 
 

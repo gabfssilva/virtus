@@ -4,18 +4,14 @@ videos and books through `kind`, within a `period`. Needs the `websearch` extra;
 import asyncio
 
 from virtus import agent, observe
-from virtus.providers import OpenAI
+from virtus.providers import ChatCompletions
 from virtus.tools import websearch
 
 # Chat Completions only takes function tools from gpt-6 with reasoning off; the Responses API has no such limit.
-model = OpenAI("gpt-6.1-terra", reasoning_effort="none")
+model = ChatCompletions("gpt-6.1-terra", reasoning_effort="none")
 
 
-@agent(
-    provider=model, 
-    system="Search before answering; cite your source.", 
-    capabilities=[observe(), websearch]
-)
+@agent(provider=model, system="Search before answering; cite your source.", capabilities=[observe(), websearch()])
 async def assistant(question: str) -> str: ...
 
 

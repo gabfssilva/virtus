@@ -161,13 +161,17 @@ class Thread[**P, R](Capability, Conversation):
 
         async def terminal(request: Request) -> AsyncIterator[Event]:
             async def execute(call: ToolCall) -> ToolResult:
-                if found := next((t for t in request.tools if t.name == call.name), None):
+                known = (*request.tools, *request.deferred)
+                if found := next((t for t in known if t.name == call.name), None):
                     return await found.execute(call)
                 return ToolResult(call.id, call.name, f"Unknown tool: {call.name}", is_error=True)
 
             sent.append(request)
             reply: AssistantMessage | None = None
-            events = live.respond(request.system, request.tools) if live else request.provider.complete(request)
+            if live:
+                events = live.respond(request.system, (*request.tools, *request.loaded))
+            else:
+                events = request.provider.complete(request)
 
             async for event in events:
                 if isinstance(event, AssistantMessage):

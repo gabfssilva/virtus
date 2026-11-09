@@ -8,12 +8,15 @@ from typing import Literal
 from anthropic import AsyncAnthropic, omit
 from anthropic.types import (
     Base64ImageSourceParam,
+    Base64PDFSourceParam,
     ContentBlockParam,
+    DocumentBlockParam,
     ImageBlockParam,
     MessageParam,
     OutputConfigParam,
     TextBlockParam,
     ToolParam,
+    ToolReferenceBlockParam,
     ToolResultBlockParam,
     ToolUseBlockParam,
 )
@@ -21,6 +24,7 @@ from anthropic.types import (
 from virtus.message import (
     AssistantMessage,
     Delta,
+    File,
     Image,
     Message,
     TextDelta,
@@ -46,6 +50,8 @@ class Anthropic(Provider):
         *,
         api_key: str | None = None,
         base_url: str | None = None,
+        timeout: float = 600,
+        max_retries: int = 2,
         max_tokens: int = 16_000,
         effort: Effort | None = None,
     ) -> None:
@@ -54,6 +60,8 @@ class Anthropic(Provider):
         self.effort = effort
         self._api_key = api_key
         self._base_url = base_url
+        self._timeout = timeout
+        self._max_retries = max_retries
 
     async def complete(self, request: Request) -> AsyncIterator[Delta | AssistantMessage]:
         if request.media:
@@ -64,7 +72,7 @@ class Anthropic(Provider):
             max_tokens=self.max_tokens,
             system=request.system or omit,
             messages=_messages(request.messages),
-            tools=[_tool(t) for t in request.tools] or omit,
+            tools=[*map(_tool, request.tools), *(_tool(t, deferred=True) for t in request.deferred)] or omit,
             output_config=self._output_config(request.output) or omit,
             stream=True,
         )
@@ -112,7 +120,9 @@ class Anthropic(Provider):
     @cached_property
     def _client(self) -> AsyncAnthropic:
         """Created on first use, so building an agent doesn't require credentials."""
-        return AsyncAnthropic(api_key=self._api_key, base_url=self._base_url)
+        return AsyncAnthropic(
+            api_key=self._api_key, base_url=self._base_url, timeout=self._timeout, max_retries=self._max_retries
+        )
 
     def __repr__(self) -> str:
         return f"Anthropic({self.model!r})"
@@ -125,10 +135,14 @@ def _messages(history: Sequence[Message]) -> list[MessageParam]:
         match message:
             case UserMessage(audio=audio) if audio:
                 raise TypeError("the Messages API does not take audio")
-            case UserMessage(content=content, images=()):
+            case UserMessage(content=content, images=(), files=()):
                 return {"role": "user", "content": content}
-            case UserMessage(content=content, images=images):
-                blocks: list[ContentBlockParam] = [*map(_image, images), TextBlockParam(type="text", text=content)]
+            case UserMessage(content=content, images=images, files=files):
+                blocks: list[ContentBlockParam] = [
+                    *map(_file, files),
+                    *map(_image, images),
+                    TextBlockParam(type="text", text=content),
+                ]
                 return {"role": "user", "content": blocks}
             case AssistantMessage(content=content, tool_calls=calls):
                 text: list[ContentBlockParam] = [TextBlockParam(type="text", text=content)] if content else []
@@ -141,11 +155,19 @@ def _messages(history: Sequence[Message]) -> list[MessageParam]:
                 raise AssertionError("tool results are grouped before conversion")
 
     def result(message: ToolResult) -> ContentBlockParam:
+        """A result that loads deferred tools carries a `tool_reference` per tool, which the API expands in place."""
         if message.audio:
             raise TypeError("the Messages API does not take audio")
-        content: str | list[TextBlockParam | ImageBlockParam] = message.content
-        if message.images:
-            content = [TextBlockParam(type="text", text=message.content), *map(_image, message.images)]
+        content: str | list[TextBlockParam | ImageBlockParam | DocumentBlockParam | ToolReferenceBlockParam]
+        content = message.content
+        if message.images or message.files or message.tools:
+            references = (ToolReferenceBlockParam(type="tool_reference", tool_name=name) for name in message.tools)
+            content = [
+                TextBlockParam(type="text", text=message.content),
+                *map(_image, message.images),
+                *map(_file, message.files),
+                *references,
+            ]
         return ToolResultBlockParam(
             type="tool_result", tool_use_id=message.call_id, content=content, is_error=message.is_error
         )
@@ -165,6 +187,14 @@ def _image(image: Image) -> ImageBlockParam:
     return ImageBlockParam(type="image", source=source)
 
 
-def _tool(tool: Tool) -> ToolParam:
-    return {"name": tool.name, "description": tool.description, "input_schema": dict(tool.schema)}
+def _file(file: File) -> DocumentBlockParam:
+    source = Base64PDFSourceParam(type="base64", media_type=file.media_type, data=b64encode(file.data).decode())
+    return DocumentBlockParam(type="document", source=source, title=file.name)
 
+
+def _tool(tool: Tool, *, deferred: bool = False) -> ToolParam:
+    """A deferred tool is sent in full but enters the context through a `tool_reference`; see `Request.deferred`."""
+    definition: ToolParam = {"name": tool.name, "description": tool.description, "input_schema": dict(tool.schema)}
+    if deferred:
+        definition["defer_loading"] = True
+    return definition

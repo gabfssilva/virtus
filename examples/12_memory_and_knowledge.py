@@ -8,7 +8,7 @@ import tempfile
 from pathlib import Path
 
 from virtus import agent, knowledge, memory
-from virtus.providers import OpenAI
+from virtus.providers import ChatCompletions
 
 
 async def main() -> None:
@@ -18,7 +18,7 @@ async def main() -> None:
         (docs / "refunds.md").write_text("# Refund policy\n\nRefunds are issued within 5 business days of the request.")
         (docs / "shipping.md").write_text("# Shipping\n\nOrders ship in 48 hours; express shipping costs 9 EUR.")
 
-        @agent(provider=OpenAI(), capabilities=[knowledge(docs), memory(Path(folder, "notes"))])
+        @agent(provider=ChatCompletions(), capabilities=[knowledge(docs), memory(Path(folder, "notes"))])
         async def support(message: str) -> str: ...
 
         print(await support("Hi, I'm Marina. How long do refunds take?"))

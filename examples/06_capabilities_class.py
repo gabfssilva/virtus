@@ -3,7 +3,7 @@
 import asyncio
 
 from virtus import Capabilities, agent, context, tool
-from virtus.providers import OpenAI
+from virtus.providers import ChatCompletions
 
 
 class Todo(Capabilities):
@@ -31,7 +31,7 @@ class Todo(Capabilities):
 async def main() -> None:
     todo = Todo()
 
-    @agent(provider=OpenAI(), capabilities=[todo])
+    @agent(provider=ChatCompletions(), capabilities=[todo])
     async def assistant(message: str) -> str: ...
 
     thread = assistant.thread()

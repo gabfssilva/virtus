@@ -9,7 +9,7 @@ from pydantic import BaseModel
 from virtus.capability import flatten
 from virtus.dispatch import Target, dispatching
 from virtus.journal import Journal, MemoryJournal
-from virtus.message import Audio, Image, UserMessage, placeholder
+from virtus.message import Audio, File, Image, UserMessage, placeholder
 from virtus.middleware import Capability, Middleware
 from virtus.output import Output, output
 from virtus.provider import Provider
@@ -118,8 +118,8 @@ class Agent[**P, R](Capability):
     def input(self, *args: object, **kwargs: object) -> UserMessage:
         """The user message a call with these arguments sends.
 
-        `Image` and `Audio` arguments, alone or in a sequence, are attached to the message; in the
-        prompt they read as `[image]` and `[audio]`.
+        `Image`, `Audio` and `File` arguments, alone or in a sequence, are attached to the message; in
+        the prompt they read as `[image]`, `[audio]` and `[file]`.
         """
         bound = self._signature.bind(*args, **kwargs)
         bound.apply_defaults()
@@ -127,8 +127,9 @@ class Agent[**P, R](Capability):
         values = list(bound.arguments.values())
         images = tuple(image for value in values for image in Image.found_in(value))
         audio = tuple(clip for value in values for clip in Audio.found_in(value))
+        files = tuple(file for value in values for file in File.found_in(value))
         text = {name: placeholder(value) or value for name, value in bound.arguments.items()}
-        return UserMessage(self._prompt.format(**text), images, audio)
+        return UserMessage(self._prompt.format(**text), images, audio, files)
 
     def middleware(self) -> tuple[Middleware, ...]:
         def conversation(parent: Conversation, thread: str | None) -> Conversation:

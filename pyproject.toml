@@ -1,7 +1,13 @@
 [project]
 name = "virtus"
-version = "0.1.0"
+dynamic = ["version"]
 description = "A minimal async framework for LLM agents"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE.md"]
+authors = [
+    { name = "Gabriel Francisco", email = "gabfssilva@gmail.com" }
+]
 requires-python = "==3.12.*"
 dependencies = [
     "openai>=1.59.6",
@@ -21,10 +27,27 @@ websearch = [
 mcp = [
     "mcp>=2.3",
 ]
+pdf = [
+    "pypdfium2>=4.30",
+    "rapidocr>=3",
+    "onnxruntime>=1.20",
+]
+
+[project.urls]
+Repository = "https://github.com/gabfssilva/virtus"
 
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling", "hatch-vcs"]
 build-backend = "hatchling.build"
+
+[tool.hatch.version]
+source = "vcs"
+
+[tool.hatch.build.hooks.vcs]
+version-file = "src/virtus/_version.py"
+
+[tool.hatch.build.targets.sdist]
+only-include = ["src"]
 
 [dependency-groups]
 dev = [
@@ -52,3 +75,6 @@ line-length = 120
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
+
+[tool.ruff.lint.flake8-bugbear]
+extend-immutable-calls = ["virtus.tools.net.Net", "virtus.pdfs.Reader", "virtus.lazy.Ranking"]

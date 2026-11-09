@@ -6,7 +6,7 @@ from collections.abc import AsyncIterator
 from pydantic import BaseModel
 
 from virtus import Snapshot, agent
-from virtus.providers import OpenAI
+from virtus.providers import ChatCompletions
 
 
 class Movie(BaseModel):
@@ -20,13 +20,13 @@ class Profile(BaseModel):
     favorite_movies: list[Movie]
 
 
-@agent(provider=OpenAI())
+@agent(provider=ChatCompletions())
 async def recommend(genre: str) -> AsyncIterator[Movie]:
     """Recommend five {genre} movies."""
     ...
 
 
-@agent(provider=OpenAI())
+@agent(provider=ChatCompletions())
 async def profile(description: str) -> Snapshot[Profile]:
     """Build a profile from: {description}"""
     ...

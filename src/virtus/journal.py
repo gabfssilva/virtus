@@ -21,6 +21,8 @@ from virtus.message import (
     AssistantMessage,
     Audio,
     AudioType,
+    File,
+    FileType,
     Image,
     ImageType,
     Message,
@@ -134,11 +136,26 @@ class _Audio(BaseModel):
         return Audio(b64decode(self.data), self.media_type)
 
 
+class _File(BaseModel):
+    media_type: FileType
+    name: str
+    data: str
+    text: str | None = None
+
+    @classmethod
+    def of(cls, file: File) -> "_File":
+        return cls(media_type=file.media_type, name=file.name, data=b64encode(file.data).decode(), text=file.text)
+
+    def file(self) -> File:
+        return File(b64decode(self.data), self.media_type, self.name, self.text)
+
+
 class _User(BaseModel):
     role: Literal["user"] = "user"
     content: str
     images: list[_Image] = []
     audio: list[_Audio] = []
+    files: list[_File] = []
 
 
 class _Call(BaseModel):
@@ -169,6 +186,8 @@ class _Tool(BaseModel):
     is_error: bool = False
     images: list[_Image] = []
     audio: list[_Audio] = []
+    files: list[_File] = []
+    tools: list[str] = []
 
 
 type _Entry = Annotated[_User | _Assistant | _Tool, Field(discriminator="role")]
@@ -184,30 +203,37 @@ _RECORD = TypeAdapter(_Record)
 
 def _entry(message: Message) -> _User | _Assistant | _Tool:
     match message:
-        case UserMessage(content=content, images=images, audio=audio):
-            return _User(content=content, images=_images(images), audio=_clips(audio))
+        case UserMessage(content=content, images=images, audio=audio, files=files):
+            return _User(content=content, images=_images(images), audio=_clips(audio), files=_files(files))
         case AssistantMessage(content=content, tool_calls=calls, images=images, audio=audio, usage=usage):
             tool_calls = [_Call(id=c.id, name=c.name, arguments=c.arguments) for c in calls]
             spoken = _Audio.of(audio) if audio else None
             used = _Usage(input=usage.input, output=usage.output) if usage else None
             return _Assistant(content=content, tool_calls=tool_calls, images=_images(images), audio=spoken, usage=used)
         case ToolResult(call_id=call_id, name=name, content=content, is_error=is_error, images=images, audio=audio):
-            entry = _Tool(call_id=call_id, name=name, content=content, is_error=is_error)
-            return entry.model_copy(update={"images": _images(images), "audio": _clips(audio)})
+            entry = _Tool(call_id=call_id, name=name, content=content, is_error=is_error, tools=list(message.tools))
+            attached = {"images": _images(images), "audio": _clips(audio), "files": _files(message.files)}
+            return entry.model_copy(update=attached)
 
 
 def _message(entry: _User | _Assistant | _Tool) -> Message:
     match entry:
-        case _User(content=content, images=images, audio=audio):
-            return UserMessage(content, tuple(i.image() for i in images), tuple(a.audio() for a in audio))
+        case _User(content=content, images=images, audio=audio, files=files):
+            media = tuple(i.image() for i in images), tuple(a.audio() for a in audio), tuple(f.file() for f in files)
+            return UserMessage(content, *media)
         case _Assistant(content=content, tool_calls=calls, images=images, audio=audio, usage=usage):
             tool_calls = tuple(ToolCall(c.id, c.name, c.arguments) for c in calls)
             spoken = audio.audio() if audio else None
             used = Usage(usage.input, usage.output) if usage else None
             return AssistantMessage(content, tool_calls, tuple(i.image() for i in images), spoken, used)
         case _Tool(call_id=call_id, name=name, content=content, is_error=is_error, images=images, audio=audio):
-            attached = tuple(i.image() for i in images), tuple(a.audio() for a in audio)
-            return ToolResult(call_id, name, content, is_error, *attached)
+            files = tuple(f.file() for f in entry.files)
+            media = tuple(i.image() for i in images), tuple(a.audio() for a in audio), files
+            return ToolResult(call_id, name, content, is_error, *media, tuple(entry.tools))
+
+
+def _files(files: Sequence[File]) -> list[_File]:
+    return [_File.of(f) for f in files]
 
 
 def _images(images: Sequence[Image]) -> list[_Image]:

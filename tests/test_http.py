@@ -44,7 +44,7 @@ def describe_http():
         server = Server((201, "application/json", b'{"id":7,"tags":["a","b"]}'))
         monkeypatch.setattr(net, "urlopen", server)
 
-        result = await http.execute(
+        result = await http().execute(
             ToolCall(
                 "c",
                 "http",
@@ -73,7 +73,7 @@ def describe_http():
         <ul><li>one</li><li>two</li></ul></body></html>"""
         monkeypatch.setattr(net, "urlopen", Server((200, "text/html; charset=utf-8", page)))
 
-        result = await http.execute(ToolCall("c", "http", json.dumps({"url": "https://example.com"})))
+        result = await http().execute(ToolCall("c", "http", json.dumps({"url": "https://example.com"})))
 
         text = "menu\n\nHello world\n\nFirst bold line.\n\none\n\ntwo"
         assert result.content == f"HTTP 200\ncontent-type: text/html; charset=utf-8\n\n{text}"
@@ -84,7 +84,7 @@ def describe_http():
         error = HTTPError("https://example.com/x", 404, "Not Found", headers, BytesIO(b"gone"))
         monkeypatch.setattr(net, "urlopen", Server(error))
 
-        result = await http.execute(ToolCall("c", "http", json.dumps({"url": "https://example.com/x"})))
+        result = await http().execute(ToolCall("c", "http", json.dumps({"url": "https://example.com/x"})))
 
         assert not result.is_error
         assert result.content == "HTTP 404\ncontent-type: text/plain\n\ngone"
@@ -92,8 +92,10 @@ def describe_http():
     async def it_describes_binary_bodies_and_truncates_long_ones(monkeypatch: pytest.MonkeyPatch):
         monkeypatch.setattr(net, "urlopen", Server((200, "image/png", b"\x89PNG" * 10), (200, "text/plain", b"x" * 30)))
 
-        image = await http.execute(ToolCall("c", "http", json.dumps({"url": "https://example.com/i.png"})))
-        text = await http.execute(ToolCall("c", "http", json.dumps({"url": "https://example.com/t", "max_chars": 10})))
+        image = await http().execute(ToolCall("c", "http", json.dumps({"url": "https://example.com/i.png"})))
+        text = await http().execute(
+            ToolCall("c", "http", json.dumps({"url": "https://example.com/t", "max_chars": 10}))
+        )
 
         assert image.content.endswith("[image/png, 40 bytes]")
         assert text.content.endswith("x" * 10 + "\n… [truncated; 30 chars in total]")
