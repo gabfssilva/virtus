@@ -27,7 +27,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python: ["3.12", "3.13", "3.13t", "3.14", "3.14t", "3.15", "3.15t"]
+        python: ["3.12", "3.13", "3.14", "3.14t", "3.15", "3.15t"]
     # The pdf extra installs only where onnxruntime and opencv ship wheels: up to 3.14, GIL builds.
     env:
       PDF: ${{ contains(fromJSON('["3.12", "3.13", "3.14"]'), matrix.python) }}

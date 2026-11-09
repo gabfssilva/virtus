@@ -6,7 +6,7 @@ A small library for building agents. Virtus allows you to describe agents as reg
 uv add virtus
 ```
 
-Python 3.12+, free-threaded builds included (the `pdf` extra installs only on 3.12–3.14 with the GIL, where `onnxruntime` and `opencv` ship wheels). The API is still subject to change.
+Python 3.12+, and the free-threaded builds from 3.14t (3.13t is out: `openai` needs `jiter`, which has no wheel for it; the `pdf` extra installs only on 3.12–3.14 with the GIL, where `onnxruntime` and `opencv` ship wheels). The API is still subject to change.
 
 ## Start with a function
 
