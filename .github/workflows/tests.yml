@@ -28,15 +28,17 @@ jobs:
       fail-fast: false
       matrix:
         python: ["3.12", "3.13", "3.13t", "3.14", "3.14t", "3.15", "3.15t"]
+    # The pdf extra installs only where onnxruntime and opencv ship wheels: up to 3.14, GIL builds.
+    env:
+      PDF: ${{ contains(fromJSON('["3.12", "3.13", "3.14"]'), matrix.python) }}
     steps:
       - uses: actions/checkout@v5
       - uses: astral-sh/setup-uv@v6
         with:
           python-version: ${{ matrix.python }}
-      # onnxruntime, which the pdf extra needs, has no wheel for 3.15 yet.
-      - if: ${{ !startsWith(matrix.python, '3.15') }}
+      - if: env.PDF == 'true'
         run: uv sync --locked --all-extras && uv run pytest -q
-      - if: ${{ startsWith(matrix.python, '3.15') }}
+      - if: env.PDF != 'true'
         run: >-
           uv sync --locked --extra anthropic --extra realtime --extra websearch --extra mcp &&
           uv run pytest -q --ignore tests/test_pdf.py --ignore tests/test_knowledge.py
