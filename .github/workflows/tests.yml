@@ -6,6 +6,10 @@ on:
   pull_request:
     branches: [main]
 
+# The lock is written under a 7-day exclude-newer (the global uv.toml); CI resolves with the same window.
+env:
+  UV_EXCLUDE_NEWER: 7 days
+
 jobs:
   check:
     runs-on: ubuntu-latest
