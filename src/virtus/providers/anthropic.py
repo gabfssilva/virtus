@@ -5,6 +5,7 @@ from functools import cached_property
 from itertools import groupby
 from typing import Literal
 
+import httpx2
 from anthropic import AsyncAnthropic, omit
 from anthropic.types import (
     Base64ImageSourceParam,
@@ -52,6 +53,7 @@ class Anthropic(Provider):
         base_url: str | None = None,
         timeout: float = 600,
         max_retries: int = 2,
+        http_client: httpx2.AsyncClient | None = None,
         max_tokens: int = 16_000,
         effort: Effort | None = None,
     ) -> None:
@@ -62,6 +64,7 @@ class Anthropic(Provider):
         self._base_url = base_url
         self._timeout = timeout
         self._max_retries = max_retries
+        self._http_client = http_client
 
     async def complete(self, request: Request) -> AsyncIterator[Delta | AssistantMessage]:
         if request.media:
@@ -121,7 +124,11 @@ class Anthropic(Provider):
     def _client(self) -> AsyncAnthropic:
         """Created on first use, so building an agent doesn't require credentials."""
         return AsyncAnthropic(
-            api_key=self._api_key, base_url=self._base_url, timeout=self._timeout, max_retries=self._max_retries
+            api_key=self._api_key,
+            base_url=self._base_url,
+            timeout=self._timeout,
+            max_retries=self._max_retries,
+            http_client=self._http_client,
         )
 
     def __repr__(self) -> str:

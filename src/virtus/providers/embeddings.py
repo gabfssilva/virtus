@@ -1,6 +1,7 @@
 from collections.abc import Sequence
 from functools import cached_property
 
+import httpx2
 from openai import AsyncOpenAI, omit
 
 from virtus.provider import Embedder, Kind
@@ -22,6 +23,7 @@ class Embeddings(Embedder):
         base_url: str | None = None,
         timeout: float = 600,
         max_retries: int = 2,
+        http_client: httpx2.AsyncClient | None = None,
         dimensions: int | None = None,
         input_type: bool = False,
     ) -> None:
@@ -32,6 +34,7 @@ class Embeddings(Embedder):
         self._base_url = base_url
         self._timeout = timeout
         self._max_retries = max_retries
+        self._http_client = http_client
 
     async def embed(self, texts: Sequence[str], kind: Kind) -> list[list[float]]:
         if not texts:
@@ -48,7 +51,11 @@ class Embeddings(Embedder):
     def _client(self) -> AsyncOpenAI:
         """Created on first use, so building an agent doesn't require credentials."""
         return AsyncOpenAI(
-            api_key=self._api_key, base_url=self._base_url, timeout=self._timeout, max_retries=self._max_retries
+            api_key=self._api_key,
+            base_url=self._base_url,
+            timeout=self._timeout,
+            max_retries=self._max_retries,
+            http_client=self._http_client,
         )
 
     def __repr__(self) -> str:

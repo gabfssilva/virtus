@@ -4,6 +4,7 @@ import wave
 from collections.abc import AsyncIterator
 from types import SimpleNamespace
 
+import httpx2
 import pytest
 from openai import omit
 from openai.types import CompletionUsage
@@ -286,3 +287,23 @@ class Replaying:
 
         self.calls.append(arguments)
         return stream(self.replies.pop(0))
+
+
+def describe_http_client():
+    async def it_sends_requests_through_the_given_client():
+        seen: list[httpx2.Request] = []
+
+        def answer(request: httpx2.Request) -> httpx2.Response:
+            seen.append(request)
+            events = [chunk(ChoiceDelta(content="hi")).model_dump_json(), "[DONE]"]
+            body = "".join(f"data: {event}\n\n" for event in events)
+            return httpx2.Response(200, headers={"content-type": "text/event-stream"}, text=body)
+
+        client = httpx2.AsyncClient(transport=httpx2.MockTransport(answer))
+        provider = ChatCompletions(api_key="k", base_url="https://llm.internal/v1", http_client=client)
+
+        @agent(provider=provider)
+        async def bot(message: str) -> str: ...
+
+        assert await bot("hello") == "hi"
+        assert [str(request.url) for request in seen] == ["https://llm.internal/v1/chat/completions"]

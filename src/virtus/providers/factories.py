@@ -7,6 +7,7 @@ Anything else compatible (DeepSeek, Ollama, Groq, Together, Gemini's OpenAI endp
 import os
 from typing import TypedDict, Unpack
 
+import httpx2
 from openai.types.shared.reasoning_effort import ReasoningEffort
 
 from virtus.providers.chat_completions import ChatCompletions
@@ -22,6 +23,7 @@ class Options(TypedDict, total=False):
     files: bool
     timeout: float
     max_retries: int
+    http_client: httpx2.AsyncClient | None
 
 
 def openrouter(model: str, *, api_key: str | None = None, **options: Unpack[Options]) -> ChatCompletions:

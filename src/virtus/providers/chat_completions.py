@@ -6,6 +6,7 @@ from functools import cached_property
 from itertools import groupby
 from typing import Literal
 
+import httpx2
 from openai import AsyncOpenAI, omit
 from openai.types.chat import (
     ChatCompletionAssistantMessageParam,
@@ -58,6 +59,8 @@ class ChatCompletions(Provider, LiveProvider):
     models accept; audio in the input needs one too. Spoken answers come back as 24 kHz mono WAV.
     `files=False` sends a `File`'s text instead of the file, for servers whose models read no PDFs.
     With a realtime model, `connect` opens the Realtime API for `Thread.live`.
+    `http_client` replaces the SDK's own, e.g. `openai.DefaultAsyncHttpxClient(verify=...)` for a server whose
+    certificate is self-signed or signed by a private CA.
     """
 
     def __init__(
@@ -68,6 +71,7 @@ class ChatCompletions(Provider, LiveProvider):
         base_url: str | None = None,
         timeout: float = 600,
         max_retries: int = 2,
+        http_client: httpx2.AsyncClient | None = None,
         temperature: float | None = None,
         max_tokens: int | None = None,
         reasoning_effort: ReasoningEffort = None,
@@ -84,6 +88,7 @@ class ChatCompletions(Provider, LiveProvider):
         self._base_url = base_url
         self._timeout = timeout
         self._max_retries = max_retries
+        self._http_client = http_client
 
     async def complete(self, request: Request) -> AsyncIterator[Delta | AssistantMessage]:
         wants_audio = "audio" in request.media
@@ -154,7 +159,11 @@ class ChatCompletions(Provider, LiveProvider):
     def _client(self) -> AsyncOpenAI:
         """Created on first use, so building an agent doesn't require credentials."""
         return AsyncOpenAI(
-            api_key=self._api_key, base_url=self._base_url, timeout=self._timeout, max_retries=self._max_retries
+            api_key=self._api_key,
+            base_url=self._base_url,
+            timeout=self._timeout,
+            max_retries=self._max_retries,
+            http_client=self._http_client,
         )
 
     def __repr__(self) -> str:
