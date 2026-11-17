@@ -1824,7 +1824,7 @@ requires-dist = [
     { name = "ddgs", marker = "extra == 'websearch'", specifier = ">=9.16" },
     { name = "mcp", marker = "extra == 'mcp'", specifier = ">=2.3" },
     { name = "onnxruntime", marker = "extra == 'pdf'", specifier = ">=1.20" },
-    { name = "openai", specifier = ">=1.59.6" },
+    { name = "openai", specifier = ">=3.25.0" },
     { name = "openai", extras = ["realtime"], marker = "extra == 'realtime'" },
     { name = "pydantic", specifier = ">=2.10.5" },
     { name = "pypdfium2", marker = "extra == 'pdf'", specifier = ">=4.30" },
